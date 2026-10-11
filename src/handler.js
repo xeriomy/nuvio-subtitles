@@ -35,7 +35,10 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
 
 		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
-		return withCache({ subtitles }, config);
+		const finalSubtitles = config.encodingFallback === true
+			? subtitles.map(s => applyEncodingFallback(s))
+			: subtitles;
+		return withCache({ subtitles: finalSubtitles }, config);
 	};
 }
 
@@ -71,6 +74,19 @@ function langRank(lang, languages) {
 	return idx === -1 ? languages.length : idx;
 }
 
+// The SDK-documented encoding fallback: ask the client's local streaming
+// server to re-encode the file as VTT. Needed because Arabic subtitles are
+// frequently published in windows-1256 and mis-render without it.
+// Never applied to ASS/SSA — converting those to VTT drops their styling.
+const VTT_FALLBACK = 'http://127.0.0.1:11470/subtitles.vtt?from=';
+const STYLING_SENSITIVE_RE = /\.(ass|ssa)(\?|#|$)/i;
+
+function applyEncodingFallback(entry) {
+	const url = entry.url;
+	if (typeof url !== 'string' || STYLING_SENSITIVE_RE.test(url)) return entry;
+	return Object.assign({}, entry, { url: `${VTT_FALLBACK}${encodeURIComponent(url)}` });
+}
+
 function withCache(payload, config) {
 	const res = Object.assign({}, payload);
 	const cacheMaxAge = intOrUndefined(config.cacheMaxAge);
@@ -92,4 +108,4 @@ function positiveInt(value, fallback) {
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
-module.exports = { createSubtitlesHandler, mergeEntries, langRank };
+module.exports = { createSubtitlesHandler, mergeEntries, langRank, applyEncodingFallback };

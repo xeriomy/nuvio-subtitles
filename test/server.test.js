@@ -220,6 +220,21 @@ test('a configured OpenSubtitles API key shows up as configured in healthz', asy
 	await stop();
 });
 
+test('request config (the /{config}/ path form) drives the encoding fallback end to end', async () => {
+	await start();
+	// {"encodingFallback":true} URL-encoded as the config path segment
+	const encodedConfig = encodeURIComponent(JSON.stringify({ encodingFallback: true }));
+	const res = await fetch(`${base}/${encodedConfig}/subtitles/movie/tt0111161.json`);
+	assert.equal(res.status, 200);
+	const body = await res.json();
+	assert.ok(body.subtitles.length > 0);
+	for (const s of body.subtitles) {
+		if (/\.ass(\?|#|$)/i.test(s.url)) continue; // ASS is never wrapped
+		assert.match(s.url, /^http:\/\/127\.0\.0\.1:11470\/subtitles\.vtt\?from=/, 'fallback form applied via user config');
+	}
+	await stop();
+});
+
 test('an unknown subtitle path is handled, not crashed', async () => {
 	await start();
 	const res = await fetch(`${base}/subtitles/movie/.json`);

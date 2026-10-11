@@ -128,6 +128,32 @@ test('no providers returns an empty list, not an error', async () => {
 	assert.deepEqual(res.subtitles, []);
 });
 
+test('does not wrap subtitles when the encoding fallback is off (default)', async () => {
+	const handler = setup([makeProvider('p1', [{ url: 'https://x/1.srt', lang: 'ar' }])], { languages: ['ar'], maxSubtitles: 20 });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles[0].url, 'https://x/1.srt');
+});
+
+test('wraps subtitle URLs in the 127.0.0.1 subtitles.vtt encoding fallback when enabled', async () => {
+	const handler = setup([makeProvider('p1', [{ url: 'https://x/1.srt', lang: 'ar' }])],
+		{ languages: ['ar'], maxSubtitles: 20, encodingFallback: true });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles[0].url, `http://127.0.0.1:11470/subtitles.vtt?from=${encodeURIComponent('https://x/1.srt')}`);
+	assert.equal(res.subtitles[0].lang, 'ar', 'lang is preserved through the wrap');
+});
+
+test('never wraps ASS/SSA files, whose styling VTT conversion would drop', async () => {
+	const handler = setup([makeProvider('p1', [
+		{ url: 'https://x/1.ass', lang: 'ar' },
+		{ url: 'https://x/2.ssa', lang: 'ar' },
+		{ url: 'https://x/3.srt', lang: 'ar' },
+	])], { languages: ['ar'], maxSubtitles: 20, encodingFallback: true });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles[0].url, 'https://x/1.ass');
+	assert.equal(res.subtitles[1].url, 'https://x/2.ssa');
+	assert.match(res.subtitles[2].url, /subtitles\.vtt\?from=/);
+});
+
 test('maxSubtitles caps the response', async () => {
 	const hits = Array.from({ length: 50 }, (_, i) => ({ url: `https://x/${i}`, lang: 'ar' }));
 	const handler = setup([makeProvider('p1', hits)], { languages: ['ar'], maxSubtitles: 5 });

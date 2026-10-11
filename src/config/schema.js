@@ -51,6 +51,13 @@ const CONFIG_SCHEMA = [
 		description: 'Enable the bundled fixtures provider, which works without credentials or network.',
 	},
 	{
+		key: 'encodingFallback',
+		env: 'ENCODING_FALLBACK',
+		type: 'checkbox',
+		default: false,
+		description: 'Serve subtitle URLs through the local streaming server encoding fallback (http://127.0.0.1:11470/subtitles.vtt?from=...) so mis-encoded files (common for Arabic windows-1256) render correctly. ASS/SSA files are never wrapped.',
+	},
+	{
 		key: 'providerOrder',
 		env: 'PROVIDER_ORDER',
 		type: 'text',
