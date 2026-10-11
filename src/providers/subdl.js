@@ -2,6 +2,7 @@
 const { jsonRequest, ProviderError } = require('../http/client');
 
 const API_ROOT = 'https://api.subdl.com/api/v1';
+const DL_ROOT = 'https://dl.subdl.com';
 
 function createSubdlProvider() {
 	return {
@@ -28,14 +29,17 @@ function createSubdlProvider() {
 		_buildSearchRequest({ media, config, extras }) {
 			const params = { api: '1' };
 			if (config.subdlApiKey) params.api_key = String(config.subdlApiKey);
+			// SubDL requires the tt-prefixed form ("can't find movie or tv" for
+			// the bare numeric id) — the opposite of OpenSubtitles.
 			if (media.imdbId) params.imdb_id = media.imdbId;
-			if (media.tmdbId) params.tmdb_id = media.tmdbId;
+			if (!media.imdbId && media.tmdbId) params.tmdb_id = media.tmdbId;
+			if (media.type) params.type = media.type === 'series' ? 'tv' : 'movie';
 			if (media.season !== undefined) params.season = String(media.season);
 			if (media.episode !== undefined) params.episode = String(media.episode);
 			params.languages = (config.languages && config.languages.length ? config.languages : ['ar']).join(',');
 
 			// SubDL supports filename-only search; only send it when we have no
-			// hash and no structured id so we never send a redundant query.
+			// id so we never send a redundant query.
 			if (!media.imdbId && !media.tmdbId && extras.filename) {
 				params.filename = extras.filename;
 			}
@@ -70,21 +74,32 @@ function createSubdlProvider() {
 
 		mapHit(hit, { config } = {}) {
 			if (!hit || typeof hit !== 'object') return null;
-			const url = hit.url;
-			if (typeof url !== 'string' || !url) return null;
-			const lang = typeof hit.language === 'string' && hit.language ? hit.language.trim().toLowerCase() : '';
+			const rawUrl = typeof hit.url === 'string' ? hit.url : '';
+			if (!rawUrl) return null;
+			const lang = typeof hit.language === 'string' && hit.language
+				? hit.language.trim().toLowerCase()
+				: (typeof hit.lang === 'string' ? hit.lang.trim().toLowerCase() : '');
 			if (!lang) return null;
 
-			// SubDL sometimes reports "Arabic" or a 2-letter code.
+			// The reported lang is a name ("Arabic") or "AR"; the item's
+			// `language` field also carries "AR". Normalise both to "ar".
 			const normalized = /^[a-z]{2}$/.test(lang) ? lang : (lang === 'arabic' ? 'ar' : lang);
 
-			const label = typeof hit.release_name === 'string' && hit.release_name
-				? hit.release_name
-				: (typeof hit.title === 'string' && hit.title ? hit.title : undefined);
+			// SECURITY: SubDL embeds the caller's api_key in every subtitle url
+			// it returns. Strip it — the key belongs to this server, and the
+			// client gets a proxy link instead (the server re-attaches the key).
+			const keyless = rawUrl.split('?')[0];
+			const path = keyless.startsWith('/') ? keyless.slice(1) : keyless;
+			const base = config && config.addonBaseUrl;
+			const url = base
+				? `${base}/proxy/subdl/${path}`
+				: `${DL_ROOT}/${path}`;
+
+			const label = typeof hit.release_name === 'string' && hit.release_name ? hit.release_name : undefined;
 
 			return {
-				id: `subdl-${stableId(url)}`,
-				url: String(url),
+				id: `subdl-${stableId(keyless)}`,
+				url,
 				lang: normalized,
 				label,
 			};

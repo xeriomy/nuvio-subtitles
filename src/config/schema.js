@@ -58,6 +58,14 @@ const CONFIG_SCHEMA = [
 		description: 'Serve subtitle URLs through the local streaming server encoding fallback (http://127.0.0.1:11470/subtitles.vtt?from=...) so mis-encoded files (common for Arabic windows-1256) render correctly. ASS/SSA files are never wrapped.',
 	},
 	{
+		key: 'addonBaseUrl',
+		env: 'ADDON_BASE_URL',
+		type: 'text',
+		default: '',
+		description: 'Public base URL of this add-on (used to build proxy download links). Derived from the request when unset; set it when running behind a reverse proxy.',
+		hidden: true,
+	},
+	{
 		key: 'providerOrder',
 		env: 'PROVIDER_ORDER',
 		type: 'text',

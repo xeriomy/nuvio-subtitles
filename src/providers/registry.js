@@ -97,16 +97,30 @@ class ProviderRegistry {
 
 		const settled = await Promise.allSettled(providers.map(p => withTimeout(p, ctx, timeoutMs)));
 
-		const entries = [];
 		const failures = [];
+		const perProvider = [];
 		settled.forEach((res, i) => {
 			const provider = providers[i];
 			if (res.status === 'fulfilled') {
-				for (const entry of res.value) entries.push(entry);
+				perProvider.push(res.value);
 			} else {
 				failures.push({ id: provider.meta.id, reason: errorReason(res.reason) });
 			}
 		});
+
+		// Round-robin across providers (in result order) so one chatty provider
+		// cannot crowd every other one out of the response's cap.
+		const entries = [];
+		for (let i = 0; ; i++) {
+			let added = false;
+			for (const list of perProvider) {
+				if (i < list.length) {
+					entries.push(list[i]);
+					added = true;
+				}
+			}
+			if (!added) break;
+		}
 
 		return { entries, failures };
 	}

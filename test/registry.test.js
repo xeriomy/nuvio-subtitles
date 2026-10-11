@@ -142,6 +142,14 @@ test('searchAll with no providers resolves empty', async () => {
 	assert.deepEqual(await reg.searchAll(ctx), { entries: [], failures: [] });
 });
 
+test('results from different providers are interleaved round-robin so no provider is starved by the cap', async () => {
+	const reg = new ProviderRegistry();
+	reg.register(makeProvider({ meta: { id: 'a', order: 10 }, hits: [1, 2, 3].map(i => ({ url: `a${i}`, lang: 'ar' })) }));
+	reg.register(makeProvider({ meta: { id: 'b', order: 20 }, hits: [1, 2, 3].map(i => ({ url: `b${i}`, lang: 'ar' })) }));
+	const res = await reg.searchAll(ctx);
+	assert.deepEqual(res.entries.map(e => e.url), ['a1', 'b1', 'a2', 'b2', 'a3', 'b3']);
+});
+
 test('health() reports every registered provider', async () => {
 	const reg = new ProviderRegistry();
 	reg.register(makeProvider({ meta: { id: 'p1' } }));

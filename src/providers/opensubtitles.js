@@ -34,7 +34,11 @@ function createOpenSubtitlesProvider() {
 
 		_buildSearchRequest({ media, config, extras }) {
 			const query = {};
-			if (media.imdbId) query.imdb_id = media.imdbId;
+			// The API 301-redirects `tt0111161` to a numeric form, mangling the
+			// param on the way (tt0111161 -> 111161). Send the numeric id up
+			// front (leading zero dropped, exactly as the API normalises it)
+			// so the search hits the right feature in one request.
+			if (media.imdbId) query.imdb_id = String(Number(media.imdbId.replace(/^tt/i, '')));
 			if (media.tmdbId) query.tmdb_id = media.tmdbId;
 			if (media.season !== undefined) query.season_number = String(media.season);
 			if (media.episode !== undefined) query.episode_number = String(media.episode);
@@ -83,20 +87,30 @@ function createOpenSubtitlesProvider() {
 		mapHit(hit, { config } = {}) {
 			if (!hit || typeof hit !== 'object') return null;
 			const attrs = hit.attributes || {};
-			const url = attrs.url;
-			if (typeof url !== 'string' || !url) return null;
 			const lang = normalizeLang(attrs.language);
 			if (!lang) return null;
 
-			const fileName = Array.isArray(hit.files) && hit.files[0] && hit.files[0].file_name ? hit.files[0].file_name : null;
-			const release = typeof attrs.release === 'string' && attrs.release ? attrs.release : fileName;
+			const release = typeof attrs.release === 'string' && attrs.release ? attrs.release : null;
 			const machine = Boolean(attrs.ai_translated);
-
 			let label = release || undefined;
 			if (machine) label = label ? `${label} (machine translated)` : 'machine translated';
 
+			// Live responses carry files under attributes (attributes.files).
+			// The download endpoint returns a temporary direct link that only
+			// the API key can obtain, so entries point at this add-on's proxy
+			// route and the client never sees (or needs) the key. The attributes
+			// url is a web PAGE, not a subtitle file — last-resort fallback only.
+			const fileId = Array.isArray(attrs.files) && attrs.files[0] && attrs.files[0].file_id;
+			let url;
+			if (fileId && config && config.addonBaseUrl) {
+				url = `${config.addonBaseUrl}/proxy/opensubtitles/${fileId}`;
+			} else {
+				url = attrs.url;
+			}
+			if (typeof url !== 'string' || !url) return null;
+
 			return {
-				id: `os-${stableId(url)}`,
+				id: `os-${fileId || stableId(url)}`,
 				url,
 				lang,
 				label,

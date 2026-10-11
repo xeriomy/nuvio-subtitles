@@ -1,23 +1,55 @@
 {
-  "_source": "recorded SubDL response shape — series, season 1 episode 1",
-  "_recorded": "2026-10-11",
-  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
-  "subtitles": [
-    {
-      "language": "Arabic",
-      "url": "https://dl.subdl.com/subtitle/9f8e7d6c/Game.of.Thrones.S01E01.1080p.srt",
-      "release_name": "Game of Thrones S01E01 Winter Is Coming 1080p",
-      "hi": true,
-      "uploader": "subdl",
-      "download_count": 4520
-    },
-    {
-      "language": "arabic",
-      "url": "https://dl.subdl.com/subtitle/1b2c3d4e/Game.of.Thrones.S01E01.720p.srt",
-      "release_name": "Game of Thrones S01E01 720p HDTV",
-      "hi": false,
-      "uploader": "other",
-      "download_count": 3104
-    }
-  ]
+ "_source": "Recorded live from api.subdl.com/api/v1/subtitles (Game of Thrones S01E01)",
+ "_recorded": "2026-10-11",
+ "_note": "Real API response excerpt. api_key query param stripped from recorded urls (secret); the add-on proxies these paths instead.",
+ "subtitles": [
+  {
+   "release_name": "EP 1",
+   "name": "EP 1.zip",
+   "lang": "Arabic",
+   "author": "Noureddine Legdani",
+   "url": "/subtitle/3699868-8620840.zip",
+   "season": 0,
+   "episode": 1,
+   "language": "AR",
+   "framerate": 0,
+   "fps": null,
+   "hi": false,
+   "episode_from": 1,
+   "episode_end": 10,
+   "full_season": false
+  },
+  {
+   "release_name": "Game of Thrones - S01E01 - Winter Is Coming",
+   "name": "Game of Thrones - S01E01 - Winter Is Coming.zip",
+   "lang": "Arabic",
+   "author": "aqjx",
+   "url": "/subtitle/3638210-8554610.zip",
+   "season": 1,
+   "episode": 1,
+   "language": "AR",
+   "framerate": 0,
+   "fps": null,
+   "hi": false,
+   "episode_from": 1,
+   "episode_end": 10,
+   "full_season": false
+  },
+  {
+   "release_name": "GOT.S07E01.AMZN.WEB",
+   "name": "GOT.S07E01.AMZN.WEB.zip",
+   "lang": "Arabic",
+   "author": "nanonnnnn",
+   "url": "/subtitle/3610965-8528378.zip",
+   "season": 7,
+   "episode": 1,
+   "language": "AR",
+   "framerate": 0,
+   "fps": null,
+   "hi": false,
+   "episode_from": 1,
+   "episode_end": 7,
+   "full_season": false
+  }
+ ]
 }

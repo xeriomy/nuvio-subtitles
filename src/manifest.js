@@ -55,7 +55,7 @@ function buildConfigDeclarations(env = {}) {
 	const defaultLangs = envValue ? String(envValue).split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean) : ['ar'];
 	const langs = defaultLangs.length ? defaultLangs : ['ar'];
 
-	return CONFIG_SCHEMA.map(entry => {
+	return CONFIG_SCHEMA.filter(entry => !entry.hidden).map(entry => {
 		const decl = {
 			key: entry.key,
 			type: entry.type,

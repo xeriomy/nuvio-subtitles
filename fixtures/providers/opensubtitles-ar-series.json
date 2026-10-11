@@ -1,37 +1,172 @@
 {
-  "_source": "recorded OpenSubtitles REST shape — series, season 1 episode 1",
-  "_recorded": "2026-10-11",
-  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
-  "data": [
-    {
-      "id": "os-3",
-      "type": "subtitle",
-      "attributes": {
-        "language": "ar",
-        "release": "Game of Thrones S01E01 Winter Is Coming 1080p",
-        "url": "https://www.opensubtitles.com/download/3b7f1c0d9e8a6b52c4d3e2f1a0b9c8d7",
-        "ai_translated": false,
-        "download_count": 28810,
-        "upload_date": "2024-04-22T11:05:31Z",
-        "uploader": { "name": "WesterosSubs" },
-        "feature_details": { "imdb_id": 940947, "tmdb_id": 1399, "title": "Game of Thrones", "season": 1, "episode": 1 }
-      },
-      "files": [{ "file_name": "Game.of.Thrones.S01E01.Winter.Is.Coming.1080p.srt" }]
+ "_source": "Recorded live from api.opensubtitles.com/api/v1/subtitles (Game of Thrones S01E01)",
+ "_recorded": "2026-10-11",
+ "_note": "Real API response excerpt (first Arabic hits). files live under attributes per the live API.",
+ "data": [
+  {
+   "id": "10540469",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "10540469",
+    "language": "ar",
+    "download_count": 1603,
+    "new_download_count": 2783,
+    "hearing_impaired": false,
+    "hd": false,
+    "fps": 23.976,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2025-07-29T05:27:26Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "13203457-s01e01-winter-is-coming",
+    "machine_translated": false,
+    "release": "S01E01 - Winter Is Coming",
+    "comments": "",
+    "legacy_subtitle_id": 13203457,
+    "legacy_uploader_id": 0,
+    "uploader": {
+     "uploader_id": 3282,
+     "name": "os-auto",
+     "rank": "Application Developers"
     },
-    {
-      "id": "os-4",
-      "type": "subtitle",
-      "attributes": {
-        "language": "ar",
-        "release": "Game of Thrones S01E01 720p HDTV",
-        "url": "https://www.opensubtitles.com/download/8a1d4c6e2b90f7358c1e0a9d3b5f7c2a",
-        "ai_translated": false,
-        "download_count": 15403,
-        "upload_date": "2024-04-22T11:07:10Z",
-        "uploader": { "name": "ArabTorrents" },
-        "feature_details": { "imdb_id": 940947, "tmdb_id": 1399, "title": "Game of Thrones", "season": 1, "episode": 1 }
-      },
-      "files": [{ "file_name": "Game.of.Thrones.S01E01.720p.HDTV.srt" }]
-    }
-  ]
+    "feature_details": {
+     "feature_id": 278305,
+     "feature_type": "Episode",
+     "year": 2011,
+     "title": "Winter Is Coming",
+     "movie_name": "لعبة العروش - S01E01  Winter Is Coming",
+     "imdb_id": 1480055,
+     "tmdb_id": 63056,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 944947,
+     "parent_title": "Game of Thrones",
+     "parent_tmdb_id": 1399,
+     "parent_feature_id": 10891
+    },
+    "url": null,
+    "related_links": null,
+    "files": [
+     {
+      "file_id": 11443984,
+      "cd_number": 1,
+      "file_name": "S01E01 - Winter Is Coming"
+     }
+    ]
+   }
+  },
+  {
+   "id": "10523013",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "10523013",
+    "language": "ar",
+    "download_count": 1315,
+    "new_download_count": 1312,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 0,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2025-07-11T20:22:09Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "13183055-game-of-thrones-s01e01-brrip-xvid-vlis",
+    "machine_translated": false,
+    "release": "Game Of Thrones.S01E01.BRRip.XviD-VLiS",
+    "comments": "",
+    "legacy_subtitle_id": 13183055,
+    "legacy_uploader_id": 0,
+    "uploader": {
+     "uploader_id": 3282,
+     "name": "os-auto",
+     "rank": "Application Developers"
+    },
+    "feature_details": {
+     "feature_id": 278305,
+     "feature_type": "Episode",
+     "year": 2011,
+     "title": "Winter Is Coming",
+     "movie_name": "Le trône de fer - S01E01  L'hiver vient",
+     "imdb_id": 1480055,
+     "tmdb_id": 63056,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 944947,
+     "parent_title": "Game of Thrones",
+     "parent_tmdb_id": 1399,
+     "parent_feature_id": 10891
+    },
+    "url": null,
+    "related_links": null,
+    "files": [
+     {
+      "file_id": 11426410,
+      "cd_number": 1,
+      "file_name": "Game Of Thrones.S01E01.BRRip.XviD-VLiS"
+     }
+    ]
+   }
+  },
+  {
+   "id": "8397392",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "8397392",
+    "language": "ar",
+    "download_count": 4070,
+    "new_download_count": 2538,
+    "hearing_impaired": false,
+    "hd": false,
+    "fps": 30,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2024-07-21T21:06:01Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "01-winterfell",
+    "machine_translated": false,
+    "release": "01- Winterfell",
+    "comments": "الموسم الثامن كاملا \" بلوراي\nImported from subscene.com/subtitles/game-of-thrones-eighth-season/arabic/1990457",
+    "legacy_subtitle_id": 12207448,
+    "legacy_uploader_id": 10030650,
+    "uploader": {
+     "uploader_id": null,
+     "name": "Anonymous",
+     "rank": "anonymous"
+    },
+    "feature_details": {
+     "feature_id": 278305,
+     "feature_type": "Episode",
+     "year": 2011,
+     "title": "Winter Is Coming",
+     "movie_name": "لعبة العروش - S01E01  Winter Is Coming",
+     "imdb_id": 1480055,
+     "tmdb_id": 63056,
+     "season_number": 1,
+     "episode_number": 1,
+     "parent_imdb_id": 944947,
+     "parent_title": "Game of Thrones",
+     "parent_tmdb_id": 1399,
+     "parent_feature_id": 10891
+    },
+    "url": null,
+    "related_links": null,
+    "files": [
+     {
+      "file_id": 9321657,
+      "cd_number": 1,
+      "file_name": "01- Winterfell"
+     }
+    ]
+   }
+  }
+ ]
 }

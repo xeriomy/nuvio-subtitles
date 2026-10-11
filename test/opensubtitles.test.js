@@ -26,16 +26,12 @@ test('supports both prefixes and both types when configured', () => {
 	assert.equal(provider.supports({ media: MEDIA_SERIES, config: { opensubtitlesApiKey: 'k' } }), true);
 });
 
-test('builds a search URL with imdb id and the requested languages', () => {
+test('builds a search URL with the NUMERIC imdb id, avoiding the API redirect that mangles the id', () => {
 	const stub = provider._buildSearchRequest({ media: MEDIA, config: CONFIG, extras: {} });
-	assert.equal(stub.path, '/subtitles');
-	assert.equal(stub.url, 'https://api.opensubtitles.com/api/v1/subtitles');
 	const q = new URLSearchParams(stub.query);
-	assert.equal(q.get('imdb_id'), 'tt0111161');
+	assert.equal(q.get('imdb_id'), '111161', 'must send the numeric id without the tt prefix');
 	assert.equal(q.get('languages'), 'ar');
-	assert.equal(q.get('moviehash'), null);
-	assert.equal(q.get('query'), null);
-	assert.equal(stub.headers['Api-Key'], '');
+	assert.equal(stub.headers['Api-Key'], '', 'no key in this test config');
 });
 
 test('builds a search URL with tmdb id, season and episode', () => {
@@ -73,28 +69,44 @@ test('sends the API key as an Api-Key header', () => {
 	assert.equal(stub.headers['Api-Key'], 'sekret');
 });
 
-test('maps a provider hit to a protocol subtitle entry', () => {
+test('maps a REAL recorded hit (attributes.files shape) to a proxy entry, so the Api-Key never leaves the server', () => {
 	const hit = {
+		id: '11719365',
+		type: 'subtitle',
 		attributes: {
 			language: 'ar',
-			url: 'https://www.opensubtitles.com/download/abc123',
-			release: 'The.Godfather.1972.1080p.BluRay.x264',
+			release: 'The.Shawshank.Redemption.1994.1080p.x264.YIFY',
+			url: 'https://www.opensubtitles.com/ar/subtitles/12604596-the-shawshank-redemption-1994-1080p-x264-yify',
 			ai_translated: false,
+			files: [{ file_id: 12628886, cd_number: 1, file_name: 'The.Shawshank.Redemption.1994.1080p.x264.YIFY.AR' }],
 		},
-		files: [{ file_name: 'The.Godfather.1972.1080p.BluRay.x264.srt' }],
 	};
-	const entry = provider.mapHit(hit, { media: MEDIA, config: CONFIG });
+	const entry = provider.mapHit(hit, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://127.0.0.1:3000' } });
 	assert.equal(entry.lang, 'ar');
-	assert.equal(entry.url, 'https://www.opensubtitles.com/download/abc123');
-	assert.equal(entry.label, 'The.Godfather.1972.1080p.BluRay.x264');
-	assert.ok(entry.id, 'id must be present and unique');
+	assert.equal(entry.url, 'http://127.0.0.1:3000/proxy/opensubtitles/12628886', 'entry must point at the credential-holding proxy, not the HTML page');
+	assert.equal(entry.label, 'The.Shawshank.Redemption.1994.1080p.x264.YIFY');
+	assert.equal(entry.id, 'os-12628886');
+});
+
+test('falls back to the API url when no proxy base is configured', () => {
+	const entry = provider.mapHit({
+		attributes: { language: 'ar', url: 'https://www.opensubtitles.com/ar/subtitles/x', files: [{ file_id: 1 }] },
+	}, { media: MEDIA, config: CONFIG });
+	assert.equal(entry.url, 'https://www.opensubtitles.com/ar/subtitles/x');
+});
+
+test('falls back to the API url when the hit has no file_id', () => {
+	const entry = provider.mapHit({
+		attributes: { language: 'ar', url: 'https://www.opensubtitles.com/ar/subtitles/y' },
+	}, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://x:1' } });
+	assert.equal(entry.url, 'https://www.opensubtitles.com/ar/subtitles/y');
 });
 
 test('marks machine-translated subtitles in the label', () => {
 	const entry = provider.mapHit({
-		attributes: { language: 'ar', url: 'https://x/1', ai_translated: true },
-	}, { media: MEDIA, config: CONFIG });
-	assert.match(entry.label, /machine|AI/i);
+		attributes: { language: 'ar', url: 'https://x/1', files: [{ file_id: 5 }], ai_translated: true },
+	}, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://x:1' } });
+	assert.match(entry.label, /machine translated/i);
 });
 
 test('rejects a hit with no language', () => {

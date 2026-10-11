@@ -1,37 +1,227 @@
 {
-  "_source": "recorded OpenSubtitles REST shape (api.opensubtitles.com/api/v1/subtitles) — payload templates used by the bundled fixtures provider",
-  "_recorded": "2026-10-11",
-  "_note": "Recorded payload shapes, not live captures: this host has no OpenSubtitles API key, so live capture was impossible. See README 'Live verification'.",
-  "data": [
-    {
-      "id": "os-1",
-      "type": "subtitle",
-      "attributes": {
-        "language": "ar",
-        "release": "The Godfather 1972 1080p BluRay x264",
-        "url": "https://www.opensubtitles.com/download/ffa5cb5f8a1e4b0c93a4f2d7e9b0c1d2",
-        "ai_translated": false,
-        "download_count": 41231,
-        "upload_date": "2024-03-11T09:12:44Z",
-        "uploader": { "name": "ArabicSrc" },
-        "feature_details": { "imdb_id": 1161, "tmdb_id": 238, "title": "The Godfather", "year": 1972 }
-      },
-      "files": [{ "file_name": "The.Godfather.1972.1080p.BluRay.x264.srt" }]
+ "_source": "Recorded live from api.opensubtitles.com/api/v1/subtitles (The Shawshank Redemption, tt0111161)",
+ "_recorded": "2026-10-11",
+ "_note": "Real API response excerpt (first Arabic hits). files live under attributes per the live API. The last entry is a recorded-shape example exercising ai_translated labeling.",
+ "data": [
+  {
+   "id": "11719365",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "11719365",
+    "language": "ar",
+    "download_count": 3344,
+    "new_download_count": 491,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": true,
+    "foreign_parts_only": false,
+    "upload_date": "2026-06-19T03:57:49Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "bonus-2020-amzn-web-dl-power",
+    "machine_translated": false,
+    "release": "Bonus.2020.AMZN.WEB-DL-POWER",
+    "comments": "",
+    "legacy_subtitle_id": 13848154,
+    "legacy_uploader_id": 9831117,
+    "uploader": {
+     "uploader_id": 534401,
+     "name": "sideissues",
+     "rank": "Trusted member"
     },
-    {
-      "id": "os-2",
-      "type": "subtitle",
-      "attributes": {
-        "language": "ar",
-        "release": "The Godfather 1972 REMASTERED 2160p WEB-DL",
-        "url": "https://www.opensubtitles.com/download/19c0e3fbb6a49a8e77d1c4b0a3e5f678",
-        "ai_translated": true,
-        "download_count": 9021,
-        "upload_date": "2025-01-02T18:40:00Z",
-        "uploader": { "name": "OpenSubtitles Bot" },
-        "feature_details": { "imdb_id": 1161, "tmdb_id": 238, "title": "The Godfather", "year": 1972 }
-      },
-      "files": [{ "file_name": "The.Godfather.1972.REMASTERED.2160p.srt" }]
-    }
-  ]
+    "feature_details": {
+     "feature_id": 646373,
+     "feature_type": "Movie",
+     "year": 1994,
+     "title": "The Shawshank Redemption",
+     "movie_name": "1994 - The Shawshank Redemption",
+     "imdb_id": 111161,
+     "tmdb_id": 278
+    },
+    "url": "https://www.opensubtitles.com/ar/subtitles/bonus-2020-amzn-web-dl-power",
+    "related_links": [
+     {
+      "label": "All subtitles for the shawshank redemption",
+      "url": "https://www.opensubtitles.com/ar/movies/bonus-2020-amzn-web-dl-power",
+      "img_url": "https://s3.opensubtitles.com/features/3/7/3/646373.jpg"
+     }
+    ],
+    "files": [
+     {
+      "file_id": 12628886,
+      "cd_number": 1,
+      "file_name": "Bonus.2020.AMZN.WEB-DL-POWER.AR"
+     }
+    ]
+   }
+  },
+  {
+   "id": "8837352",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "8837352",
+    "language": "ar",
+    "download_count": 7637,
+    "new_download_count": 2433,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2024-08-29T23:38:33Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "12604596-the-shawshank-redemption-1994-1080p-x264-yify",
+    "machine_translated": false,
+    "release": "The.Shawshank.Redemption.1994.1080p.x264.YIFY",
+    "comments": "",
+    "legacy_subtitle_id": 12604596,
+    "legacy_uploader_id": 0,
+    "uploader": {
+     "uploader_id": 3282,
+     "name": "os-auto",
+     "rank": "Application Developers"
+    },
+    "feature_details": {
+     "feature_id": 646373,
+     "feature_type": "Movie",
+     "year": 1994,
+     "title": "The Shawshank Redemption",
+     "movie_name": "1994 - The Shawshank Redemption",
+     "imdb_id": 111161,
+     "tmdb_id": 278
+    },
+    "url": "https://www.opensubtitles.com/ar/subtitles/12604596-the-shawshank-redemption-1994-1080p-x264-yify",
+    "related_links": [
+     {
+      "label": "All subtitles for the shawshank redemption",
+      "url": "https://www.opensubtitles.com/ar/movies/12604596-the-shawshank-redemption-1994-1080p-x264-yify",
+      "img_url": "https://s8.opensubtitles.com/features/3/7/3/646373.jpg"
+     }
+    ],
+    "files": [
+     {
+      "file_id": 9756978,
+      "cd_number": 1,
+      "file_name": "The.Shawshank.Redemption.1994.1080p.x264.YIFY"
+     }
+    ]
+   }
+  },
+  {
+   "id": "7974605",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "7974605",
+    "language": "ar",
+    "download_count": 7524,
+    "new_download_count": 1188,
+    "hearing_impaired": false,
+    "hd": false,
+    "fps": 0,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": false,
+    "foreign_parts_only": false,
+    "upload_date": "2024-06-30T21:59:18Z",
+    "ai_translated": false,
+    "nb_cd": 1,
+    "slug": "the_shawshank_redemption",
+    "machine_translated": false,
+    "release": "The_Shawshank_Redemption",
+    "comments": "",
+    "legacy_subtitle_id": 10743181,
+    "legacy_uploader_id": 0,
+    "uploader": {
+     "uploader_id": 3282,
+     "name": "os-auto",
+     "rank": "Application Developers"
+    },
+    "feature_details": {
+     "feature_id": 646373,
+     "feature_type": "Movie",
+     "year": 1994,
+     "title": "The Shawshank Redemption",
+     "movie_name": "1994 - The Shawshank Redemption",
+     "imdb_id": 111161,
+     "tmdb_id": 278
+    },
+    "url": "https://www.opensubtitles.com/ar/subtitles/the_shawshank_redemption",
+    "related_links": [
+     {
+      "label": "All subtitles for the shawshank redemption",
+      "url": "https://www.opensubtitles.com/ar/movies/the_shawshank_redemption",
+      "img_url": "https://s8.opensubtitles.com/features/3/7/3/646373.jpg"
+     }
+    ],
+    "files": [
+     {
+      "file_id": 8901652,
+      "cd_number": 1,
+      "file_name": "The_Shawshank_Redemption"
+     }
+    ]
+   }
+  },
+  {
+   "id": "recorded-shape-example",
+   "type": "subtitle",
+   "attributes": {
+    "subtitle_id": "recorded-shape-example",
+    "language": "ar",
+    "download_count": 3344,
+    "new_download_count": 491,
+    "hearing_impaired": false,
+    "hd": true,
+    "fps": 23.976,
+    "votes": 0,
+    "ratings": 0,
+    "from_trusted": true,
+    "foreign_parts_only": false,
+    "upload_date": "2026-01-01T00:00:00Z",
+    "ai_translated": true,
+    "nb_cd": 1,
+    "slug": "bonus-2020-amzn-web-dl-power",
+    "machine_translated": false,
+    "release": "Bonus.2020.AMZN.WEB-DL-POWER",
+    "comments": "",
+    "legacy_subtitle_id": 13848154,
+    "legacy_uploader_id": 9831117,
+    "uploader": {
+     "uploader_id": 534401,
+     "name": "sideissues",
+     "rank": "Trusted member"
+    },
+    "feature_details": {
+     "feature_id": 646373,
+     "feature_type": "Movie",
+     "year": 1994,
+     "title": "The Shawshank Redemption",
+     "movie_name": "1994 - The Shawshank Redemption",
+     "imdb_id": 111161,
+     "tmdb_id": 278
+    },
+    "url": "https://www.opensubtitles.com/ar/subtitles/bonus-2020-amzn-web-dl-power",
+    "related_links": [
+     {
+      "label": "All subtitles for the shawshank redemption",
+      "url": "https://www.opensubtitles.com/ar/movies/bonus-2020-amzn-web-dl-power",
+      "img_url": "https://s3.opensubtitles.com/features/3/7/3/646373.jpg"
+     }
+    ],
+    "files": [
+     {
+      "file_id": 12628886,
+      "cd_number": 1,
+      "file_name": "Bonus.2020.AMZN.WEB-DL-POWER.AR"
+     }
+    ]
+   }
+  }
+ ]
 }

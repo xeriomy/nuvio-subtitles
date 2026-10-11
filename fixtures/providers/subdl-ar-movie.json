@@ -1,23 +1,55 @@
 {
-  "_source": "recorded SubDL response shape (api.subdl.com/api/v1/subtitles)",
-  "_recorded": "2026-10-11",
-  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
-  "subtitles": [
-    {
-      "language": "Arabic",
-      "url": "https://dl.subdl.com/subtitle/1a2b3c4d/The.Godfather.1972.1080p.srt",
-      "release_name": "The Godfather 1972 BluRay 1080p",
-      "hi": true,
-      "uploader": "subdl",
-      "download_count": 3311
-    },
-    {
-      "language": "AR",
-      "url": "https://dl.subdl.com/subtitle/5e6f7a8b/The.Godfather.1972.720p.srt",
-      "release_name": "The Godfather 720p BRRip",
-      "hi": false,
-      "downloader": "other",
-      "download_count": 2140
-    }
-  ]
+ "_source": "Recorded live from api.subdl.com/api/v1/subtitles (The Shawshank Redemption, tt0111161)",
+ "_recorded": "2026-10-11",
+ "_note": "Real API response excerpt. api_key query param stripped from recorded urls (secret); the add-on proxies these paths instead.",
+ "subtitles": [
+  {
+   "release_name": "trdebrid.com_nvOZtW.The.Shawshank.Redemption.1994.BDRip.x264.4PlayHD",
+   "name": "trdebrid.com_nvOZtW.The.Shawshank.Redemption.1994.BDRip.x264.4PlayHD.zip",
+   "lang": "Arabic",
+   "author": "Rashed Dh",
+   "url": "/subtitle/3586840-8504118.zip",
+   "season": 0,
+   "episode": null,
+   "language": "AR",
+   "framerate": 0,
+   "fps": null,
+   "hi": false,
+   "episode_from": null,
+   "episode_end": 0,
+   "full_season": false
+  },
+  {
+   "release_name": "The.Shawshank.Redemption.1994.2160p.(4K).BluRay.[arabp2p.net].[moappmovies.blogspot.com]_",
+   "name": "The.Shawshank.Redemption.1994.2160p.(4K).BluRay.[arabp2p.net].[moappmovies.blogspot.com]_.zip",
+   "lang": "Arabic",
+   "author": "MoAppOfficial",
+   "url": "/subtitle/3434903-8358643.zip",
+   "season": 0,
+   "episode": null,
+   "language": "AR",
+   "framerate": 0,
+   "fps": null,
+   "hi": false,
+   "episode_from": null,
+   "episode_end": 0,
+   "full_season": false
+  },
+  {
+   "release_name": "The.Shawshank.Redemption.1994.1080p.bluray.mora.25r",
+   "name": "The.Shawshank.Redemption.1994.1080p.bluray.mora.25r.zip",
+   "lang": "Arabic",
+   "author": "mora",
+   "url": "/subtitle/3415926-8339405.zip",
+   "season": 0,
+   "episode": null,
+   "language": "AR",
+   "framerate": 3,
+   "fps": "25.000",
+   "hi": false,
+   "episode_from": null,
+   "episode_end": 0,
+   "full_season": false
+  }
+ ]
 }

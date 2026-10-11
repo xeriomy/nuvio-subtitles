@@ -15,9 +15,16 @@ const { getRouter } = require('stremio-addon-sdk');
 const qs = require('node:querystring');
 const { buildAddon } = require('./addon');
 const { parseExtras } = require('./catalog');
+const { createOpenSubtitlesDownloader } = require('./providers/opensubtitlesDownload');
 
 // /[/config]/subtitles/{type}/{id}[/{extra}].json  — config is URL-encoded JSON
 const SUBTITLES_RE = /^\/(?:([^/]+)\/)?subtitles\/([^/]+)\/([^/]+?)(?:\/([^/]*))?\.json$/;
+
+// Credential-holding download proxies, so the client never sees API keys:
+//   /proxy/opensubtitles/{fileId}  -> POST download endpoint -> 302 temp link
+//   /proxy/subdl/{path}            -> 302 to dl.subdl.com with the key re-attached
+const OS_PROXY_RE = /^\/proxy\/opensubtitles\/([^/]+)$/;
+const SUBDL_PROXY_RE = /^\/proxy\/subdl\/([A-Za-z0-9][A-Za-z0-9/._-]*)$/;
 
 /**
  * @param {{env?: object, providers?: Array, version?: string}} [opts]
@@ -26,6 +33,7 @@ const SUBTITLES_RE = /^\/(?:([^/]+)\/)?subtitles\/([^/]+)\/([^/]+?)(?:\/([^/]*))
 function createServer(opts = {}) {
 	const { manifest, interface: iface, registry, resolveConfig } = buildAddon(opts);
 	const sdkRouter = getRouter({ manifest, get: iface.get });
+	const opensubtitlesDownloader = opts.opensubtitlesDownloader || createOpenSubtitlesDownloader();
 
 	return function addonRequestListener(req, res) {
 		// The addon protocol requires CORS on every route, including manifest.
@@ -58,9 +66,11 @@ function createServer(opts = {}) {
 			return;
 		}
 
+		if (serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader })) return;
+
 		const match = SUBTITLES_RE.exec(pathname);
 		if (match) {
-			serveSubtitles(match, url, { iface, resolveConfig }, res);
+			serveSubtitles(match, url, req, { iface, resolveConfig }, res);
 			return;
 		}
 
@@ -69,7 +79,7 @@ function createServer(opts = {}) {
 	};
 }
 
-function serveSubtitles(match, url, { iface, resolveConfig }, res) {
+function serveSubtitles(match, url, req, { iface, resolveConfig }, res) {
 	const [, rawConfig, rawType, rawId, rawExtra] = match;
 
 	// Merge both documented extra forms; query-string wins on conflict because
@@ -82,12 +92,87 @@ function serveSubtitles(match, url, { iface, resolveConfig }, res) {
 	const config = parseConfig(rawConfig);
 	const type = safeDecode(rawType);
 
-	iface.get('subtitles', type, rawId, extras, config)
+	// Providers that build proxy download links need this add-on's public
+	// base URL: the explicit ADDON_BASE_URL wins (reverse-proxy deployments),
+	// otherwise it is derived from the incoming request.
+	const resolved = resolveConfig(config);
+	resolved.addonBaseUrl = resolved.addonBaseUrl || requestBase(req);
+
+	iface.get('subtitles', type, rawId, extras, resolved)
 		.then((resp) => sendSubtitlesResponse(resp, res))
 		.catch((err) => {
 			console.error('[subtitles] handler error:', err && err.message ? err.message : err);
 			sendJson(res, 500, { err: 'handler error' });
 		});
+}
+
+/** "http(s)://host[:port]" as seen by this server (X-Forwarded-* aware). */
+function requestBase(req) {
+	const forwardedProto = String(req.headers['x-forwarded-proto'] || '');
+	const proto = (forwardedProto || (req.socket && req.socket.encrypted ? 'https' : 'http')).split(',')[0].trim();
+	const forwardedHost = String(req.headers['x-forwarded-host'] || '');
+	const host = (forwardedHost || req.headers.host || '127.0.0.1').split(',')[0].trim();
+	return `${proto}://${host}`;
+}
+
+/**
+ * Handle the /proxy/... routes. Returns true when the request was handled.
+ * These routes exist because provider files are only reachable with the
+ * provider's API key, which must never leave this server.
+ */
+function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader }) {
+	const os = OS_PROXY_RE.exec(pathname);
+	if (os) {
+		if (req.method !== 'GET' && req.method !== 'HEAD') {
+			sendJson(res, 405, { err: 'method not allowed' });
+			return true;
+		}
+		if (!/^\d+$/.test(os[1])) {
+			sendJson(res, 400, { err: 'file id must be numeric' });
+			return true;
+		}
+		const config = resolveConfig(undefined);
+		opensubtitlesDownloader(os[1], config)
+			.then((link) => {
+				res.writeHead(302, {
+					Location: link,
+					// temp links are short-lived; let the client cache briefly
+					'Cache-Control': 'max-age=300, public',
+				});
+				res.end();
+			})
+			.catch((err) => {
+				console.error('[proxy] opensubtitles download failed:', err && err.message ? err.message : err);
+				sendJson(res, 502, { err: 'subtitle download failed' });
+			});
+		return true;
+	}
+
+	const subdl = SUBDL_PROXY_RE.exec(pathname);
+	if (subdl) {
+		if (req.method !== 'GET' && req.method !== 'HEAD') {
+			sendJson(res, 405, { err: 'method not allowed' });
+			return true;
+		}
+		const path = subdl[1];
+		if (path.includes('..') || path.includes('//')) {
+			sendJson(res, 400, { err: 'bad path' });
+			return true;
+		}
+		const config = resolveConfig(undefined);
+		if (!config.subdlApiKey) {
+			sendJson(res, 503, { err: 'SubDL is not configured' });
+			return true;
+		}
+		res.writeHead(302, {
+			Location: `https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`,
+			'Cache-Control': 'max-age=300, public',
+		});
+		res.end();
+		return true;
+	}
+
+	return false;
 }
 
 function sendSubtitlesResponse(resp, res) {

@@ -16,7 +16,7 @@ class ProviderError extends Error {
  * GET a JSON document.
  *
  * @param {string} url
- * @param {{headers?: object, timeoutMs?: number, provider?: string}} [opts]
+ * @param {{headers?: object, body?: string, method?: string, timeoutMs?: number, provider?: string}} [opts]
  * @returns {Promise<any>} parsed JSON
  *
  * Timeout hierarchy: the provider registry races each provider against
@@ -31,7 +31,9 @@ async function jsonRequest(url, opts = {}) {
 
 	try {
 		const res = await fetch(url, {
+			method: opts.method || 'GET',
 			headers: Object.assign({ Accept: 'application/json' }, opts.headers),
+			body: opts.body,
 			signal: controller.signal,
 		});
 		const text = await res.text();

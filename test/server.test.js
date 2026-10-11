@@ -220,6 +220,61 @@ test('a configured OpenSubtitles API key shows up as configured in healthz', asy
 	await stop();
 });
 
+test('the proxy route redirects to the provider download link and never exposes the key', async () => {
+	let called = null;
+	const fakeDownloader = async (fileId, config) => {
+		called = { fileId, key: config.opensubtitlesApiKey };
+		return 'https://dl.example.com/temp/abc.srt';
+	};
+	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, opensubtitlesDownloader: fakeDownloader });
+	const res = await fetch(`${base}/proxy/opensubtitles/12628886`, { redirect: 'manual' });
+	assert.equal(res.status, 302, 'must redirect to the temp link');
+	assert.equal(res.headers.get('location'), 'https://dl.example.com/temp/abc.srt');
+	assert.equal(called.fileId, '12628886');
+	assert.equal(called.key, 'key');
+	assert.equal((res.headers.get('location') || '').includes('key'), false, 'the API key must not appear in the redirect target');
+	await stop();
+});
+
+test('the proxy route rejects non-numeric file ids', async () => {
+	await start();
+	const res = await fetch(`${base}/proxy/opensubtitles/not-a-number`, { redirect: 'manual' });
+	assert.equal(res.status, 400);
+	await stop();
+});
+
+test('the proxy route surfaces a provider download failure as 502, not a crash', async () => {
+	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, opensubtitlesDownloader: async () => { throw new Error('HTTP 403'); } });
+	const res = await fetch(`${base}/proxy/opensubtitles/1`, { redirect: 'manual' });
+	assert.equal(res.status, 502);
+	await stop();
+});
+
+test('the SubDL proxy route appends the key server-side and strips traversal attempts', async () => {
+	await start({ env: { SUBDL_API_KEY: 'sk' } });
+	const res = await fetch(`${base}/proxy/subdl/subtitle/3699868-8620840.zip`, { redirect: 'manual' });
+	assert.equal(res.status, 302);
+	const loc = res.headers.get('location');
+	assert.equal(loc, 'https://dl.subdl.com/subtitle/3699868-8620840.zip?api_key=sk');
+	await stop();
+});
+
+test('the SubDL proxy route rejects traversal and scheme tricks', async () => {
+	await start({ env: { SUBDL_API_KEY: 'sk' } });
+	for (const path of ['/proxy/subdl/../etc/passwd', '/proxy/subdl//evil', '/proxy/subdl/subtitle/x.zip/..%2f..%2f']) {
+		const res = await fetch(`${base}${encodeURI(path)}`, { redirect: 'manual' });
+		assert.ok([400, 404].includes(res.status), `${path} must be rejected, got ${res.status}`);
+	}
+	await stop();
+});
+
+test('the manifest never advertises the hidden addonBaseUrl key', async () => {
+	await start();
+	const manifest = await (await fetch(`${base}/manifest.json`)).json();
+	assert.equal(manifest.config.some(c => c.key === 'addonBaseUrl'), false, 'internal deployment key must stay out of the user UI');
+	await stop();
+});
+
 test('request config (the /{config}/ path form) drives the encoding fallback end to end', async () => {
 	await start();
 	// {"encodingFallback":true} URL-encoded as the config path segment
