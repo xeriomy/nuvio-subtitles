@@ -31,7 +31,7 @@ curl "http://127.0.0.1:3000/subtitles/series/tt0944947:1:1.json"
 Tests:
 
 ```bash
-npm test           # node:test — 113 checks, no network required
+npm test           # node:test — 119 checks, no network required
 ```
 
 ## Install into Nuvio (install-by-URL)
@@ -220,7 +220,7 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 
 **Verified locally (this environment, no credentials available):**
 
-- `npm test` — 113 checks, all passing: id-prefix routing (`tt…`, `tmdb:…`, season/episode, percent-encoded forms), per-provider request building and result mapping, provider failure/timeout isolation, empty results, provider register/remove, config layering, manifest declaration, CORS/cache headers, extras bridging, encoding fallback.
+- `npm test` — 119 checks, all passing: id-prefix routing (`tt…`, `tmdb:…`, season/episode, percent-encoded forms), per-provider request building and result mapping, provider failure/timeout isolation, empty results, provider register/remove, config layering, manifest declaration, CORS/cache headers, extras bridging, encoding fallback.
 - Live server on `127.0.0.1`: `GET /manifest.json` advertises the subtitles resource and correct idPrefixes; `GET /subtitles/movie/tt0111161.json?videoHash=8e245d9679d31e12&videoSize=652174912&filename=The.Godfather.1972.mp4` and `GET /subtitles/series/tmdb%3A1399%3A1%3A2.json` both return valid protocol entries with Arabic included under the default configuration; `OPTIONS` preflight and cache headers verified; `/healthz` reports all three providers.
 - **Failure isolation against the real network**: with deliberately invalid API keys for both live providers, the request still returns 4 Arabic entries from the fixtures provider in ~1.2 s.
 

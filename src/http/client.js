@@ -18,6 +18,11 @@ class ProviderError extends Error {
  * @param {string} url
  * @param {{headers?: object, timeoutMs?: number, provider?: string}} [opts]
  * @returns {Promise<any>} parsed JSON
+ *
+ * Timeout hierarchy: the provider registry races each provider against
+ * `config.providerTimeoutMs` (default 8000) and abandons losers, so this
+ * client's own — more generous — default of 15000 only bounds fetches made
+ * outside the registry. The registry always wins the race.
  */
 async function jsonRequest(url, opts = {}) {
 	const timeoutMs = opts.timeoutMs || 15000;

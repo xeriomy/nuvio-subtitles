@@ -118,7 +118,12 @@ function sendJson(res, status, payload) {
 	res.end(JSON.stringify(payload));
 }
 
-/** /%7B%22languages%22%3A%5B%22ar%22%5D%7D/ -> {"languages":["ar"]} ({} on garbage) */
+/**
+ * Parse the /{config} path segment — any JSON object the client sends back
+ * after its configuration UI, URL-encoded in the path.
+ * Example: /%7B%22languages%22%3A%5B%22ar%22%5D%7D/ -> {"languages":["ar"]}
+ * Malformed input resolves to {} (never an error).
+ */
 function parseConfig(raw) {
 	if (!raw) return {};
 	try {
