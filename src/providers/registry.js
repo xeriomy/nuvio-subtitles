@@ -85,7 +85,7 @@ class ProviderRegistry {
 		const providers = this.enabled(config).filter(p => {
 			// A provider that declares credential requirements is skipped while
 			// it lacks them, so the user is never silently shown nothing.
-			if (p.isConfigured && safe(() => p.isConfigured()) === false) return false;
+			if (p.isConfigured && safe(() => p.isConfigured(config)) === false) return false;
 			try {
 				return p.supports({ media, config }) !== false;
 			} catch (e) {
@@ -119,7 +119,7 @@ class ProviderRegistry {
 			name: p.meta.name,
 			meta: p.meta,
 			enabled: isEnabled(p, settings),
-			configured: safe(() => p.isConfigured()) !== false,
+			configured: safe(() => p.isConfigured(config)) !== false,
 			supported: safe(() => p.supports({ media: {}, config })) !== false,
 		}));
 	}
