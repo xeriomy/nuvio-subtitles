@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# secrets & local config
+.env
+.env.*
+!.env.example
+
+# test output
+coverage/
+.nyc_output/
+
+# logs
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
