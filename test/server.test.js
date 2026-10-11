@@ -206,6 +206,9 @@ test('GET /healthz reports every provider and its state', async () => {
 	assert.deepEqual(body.providers.map(p => p.id).sort(), ['demoFixtures', 'opensubtitles', 'subdl']);
 	const os = body.providers.find(p => p.id === 'opensubtitles');
 	assert.equal(os.configured, false, 'no credentials in this test environment');
+	const fixtures = body.providers.find(p => p.id === 'demoFixtures');
+	assert.equal(fixtures.configured, true, 'the fixtures provider needs nothing');
+	assert.equal(os.supportsVideoHash, true, 'declared hash-matching capability is surfaced');
 	await stop();
 });
 

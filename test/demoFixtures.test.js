@@ -18,6 +18,22 @@ test('is configured with no credentials', () => {
 	assert.equal(provider.isConfigured({}), true);
 });
 
+test('merges every recorded source for the request, like the live providers would', async () => {
+	const hits = await provider.search({ media: MOVIE_MEDIA, config: {}, extras: {} });
+	const mapped = hits.map(h => provider.mapHit(h, { media: MOVIE_MEDIA, config: {} })).filter(Boolean);
+	const sources = new Set(mapped.map(m => m.id.split('-')[0]));
+	assert.ok(sources.has('os'), 'OpenSubtitles fixture entries present');
+	assert.ok(sources.has('subdl'), 'SubDL fixture entries present');
+	assert.ok(mapped.length >= 4, 'both sources contribute');
+});
+
+test('series requests merge the series fixtures from both sources', async () => {
+	const hits = await provider.search({ media: SERIES_MEDIA, config: {}, extras: {} });
+	const mapped = hits.map(h => provider.mapHit(h, { media: SERIES_MEDIA, config: {} })).filter(Boolean);
+	assert.ok(mapped.some(m => m.id.startsWith('os-')), 'OpenSubtitles series entries');
+	assert.ok(mapped.some(m => m.id.startsWith('subdl-')), 'SubDL series entries');
+});
+
 test('serves Arabic subtitles for a movie request', async () => {
 	const hits = await provider.search({ media: MOVIE_MEDIA, config: {}, extras: {} });
 	assert.ok(hits.length > 0, 'must return hits');

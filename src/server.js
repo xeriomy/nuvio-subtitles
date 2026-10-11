@@ -109,7 +109,7 @@ function healthView(registry, resolveConfig) {
 		name: p.name,
 		enabled: p.enabled,
 		configured: p.configured,
-		supported: p.supported,
+		supportsVideoHash: p.meta ? p.meta.supportsVideoHash === true : false,
 	}));
 }
 

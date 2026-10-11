@@ -53,10 +53,19 @@ function createDemoFixturesProvider({ openSubtitlesMapper, subdlMapper } = {}) {
 		},
 
 		_pick(media) {
-			// Series requests get the series fixture, everything else the movie one.
+			// Series requests get the series fixtures, everything else the movie
+			// ones. Both recorded sources are served together so the merged
+			// response reflects what the live providers would jointly return.
 			const series = media && media.season !== undefined && media.episode !== undefined;
-			const primary = series ? 'opensubtitles-ar-series.json' : 'opensubtitles-ar-movie.json';
-			return this._load(primary) || this._load(series ? 'subdl-ar-series.json' : 'subdl-ar-movie.json');
+			const files = series
+				? ['opensubtitles-ar-series.json', 'subdl-ar-series.json']
+				: ['opensubtitles-ar-movie.json', 'subdl-ar-movie.json'];
+			const hits = [];
+			for (const file of files) {
+				const loaded = this._load(file);
+				if (loaded) hits.push(...loaded.hits);
+			}
+			return { hits };
 		},
 
 		/**
@@ -70,8 +79,9 @@ function createDemoFixturesProvider({ openSubtitlesMapper, subdlMapper } = {}) {
 
 		mapHit(hit, ctx = {}) {
 			if (!hit || typeof hit !== 'object') return null;
-			const picked = this._pick(ctx.media);
-			const mapper = picked ? mappers[picked.mapper] : null;
+			// Route by hit shape: OpenSubtitles REST hits carry `attributes`,
+			// SubDL hits carry the fields directly.
+			const mapper = hit.attributes ? mappers.opensubtitles : mappers.subdl;
 			if (!mapper) return null;
 			return mapper(hit, ctx);
 		},
