@@ -1,0 +1,23 @@
+{
+  "_source": "recorded SubDL response shape — series, season 1 episode 1",
+  "_recorded": "2026-10-11",
+  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
+  "subtitles": [
+    {
+      "language": "Arabic",
+      "url": "https://dl.subdl.com/subtitle/9f8e7d6c/Game.of.Thrones.S01E01.1080p.srt",
+      "release_name": "Game of Thrones S01E01 Winter Is Coming 1080p",
+      "hi": true,
+      "uploader": "subdl",
+      "download_count": 4520
+    },
+    {
+      "language": "arabic",
+      "url": "https://dl.subdl.com/subtitle/1b2c3d4e/Game.of.Thrones.S01E01.720p.srt",
+      "release_name": "Game of Thrones S01E01 720p HDTV",
+      "hi": false,
+      "uploader": "other",
+      "download_count": 3104
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_source": "recorded SubDL response shape (api.subdl.com/api/v1/subtitles)",
+  "_recorded": "2026-10-11",
+  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
+  "subtitles": [
+    {
+      "language": "Arabic",
+      "url": "https://dl.subdl.com/subtitle/1a2b3c4d/The.Godfather.1972.1080p.srt",
+      "release_name": "The Godfather 1972 BluRay 1080p",
+      "hi": true,
+      "uploader": "subdl",
+      "download_count": 3311
+    },
+    {
+      "language": "AR",
+      "url": "https://dl.subdl.com/subtitle/5e6f7a8b/The.Godfather.1972.720p.srt",
+      "release_name": "The Godfather 720p BRRip",
+      "hi": false,
+      "downloader": "other",
+      "download_count": 2140
+    }
+  ]
+}

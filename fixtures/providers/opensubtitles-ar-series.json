@@ -1,0 +1,37 @@
+{
+  "_source": "recorded OpenSubtitles REST shape — series, season 1 episode 1",
+  "_recorded": "2026-10-11",
+  "_note": "Recorded payload shapes, not live captures. See README 'Live verification'.",
+  "data": [
+    {
+      "id": "os-3",
+      "type": "subtitle",
+      "attributes": {
+        "language": "ar",
+        "release": "Game of Thrones S01E01 Winter Is Coming 1080p",
+        "url": "https://www.opensubtitles.com/download/3b7f1c0d9e8a6b52c4d3e2f1a0b9c8d7",
+        "ai_translated": false,
+        "download_count": 28810,
+        "upload_date": "2024-04-22T11:05:31Z",
+        "uploader": { "name": "WesterosSubs" },
+        "feature_details": { "imdb_id": 940947, "tmdb_id": 1399, "title": "Game of Thrones", "season": 1, "episode": 1 }
+      },
+      "files": [{ "file_name": "Game.of.Thrones.S01E01.Winter.Is.Coming.1080p.srt" }]
+    },
+    {
+      "id": "os-4",
+      "type": "subtitle",
+      "attributes": {
+        "language": "ar",
+        "release": "Game of Thrones S01E01 720p HDTV",
+        "url": "https://www.opensubtitles.com/download/8a1d4c6e2b90f7358c1e0a9d3b5f7c2a",
+        "ai_translated": false,
+        "download_count": 15403,
+        "upload_date": "2024-04-22T11:07:10Z",
+        "uploader": { "name": "ArabTorrents" },
+        "feature_details": { "imdb_id": 940947, "tmdb_id": 1399, "title": "Game of Thrones", "season": 1, "episode": 1 }
+      },
+      "files": [{ "file_name": "Game.of.Thrones.S01E01.720p.HDTV.srt" }]
+    }
+  ]
+}
