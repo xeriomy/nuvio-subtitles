@@ -111,8 +111,45 @@ test('_filterByShow passes results through when the matched show is the requeste
 	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { tmdbId: '63926' }).length, 1);
 });
 
-test('_filterByShow accepts id comparison with or without the tt prefix', () => {
-	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { imdbId: '2359704' }).length, 1);
+test('_filterByShow rejects when the matched show name shares nothing with the filename', () => {
+	// live evidence: SubDL maps tmdb 63926 to One-Punch Man and echoes ids for
+	// unknown titles — the id echo validates nothing, the name does.
+	const BODY_OPM = {
+		status: true,
+		results: [{ name: 'One-Punch Man', imdb_id: 'tt4508902', tmdb_id: 63926 }],
+		subtitles: [{ language: 'Arabic', url: '/subtitle/9-9.zip', release_name: 'OPM S01' }],
+	};
+	const res = provider._filterByShow(BODY_OPM, { tmdbId: '63926' }, { filename: 'JoJos.Bizarre.Adventure.S02E05.1080p.BluRay.REMUX.mkv' });
+	assert.deepEqual(res, [], 'One-Punch Man subs must not serve for a JoJo filename');
+});
+
+test('_filterByShow keeps results when the show name matches the filename', () => {
+	const BODY_SBR = {
+		status: true,
+		results: [{ name: 'Steel Ball Run: JoJo no Kimyou na Bouken', imdb_id: 'tt111', tmdb_id: 63926 }],
+		subtitles: [{ language: 'Arabic', url: '/subtitle/9-9.zip', release_name: 'JoJo pack' }],
+	};
+	const res = provider._filterByShow(BODY_SBR, { tmdbId: '63926' }, { filename: 'JoJos.Bizarre.Adventure.S02E05.mkv' });
+	assert.equal(res.length, 1, '"JoJo" appears in both → keep');
+});
+
+test('_filterByShow never false-rejects non-Latin filenames (Arabic titles)', () => {
+	const res = provider._filterByShow(BODY_RIGHT_SHOW, { tmdbId: '63926' }, { filename: 'بين النجوم 2014 1080p.mkv' });
+	assert.equal(res.length, 1, 'no Latin tokens to compare → skip the name gate');
+});
+
+test('_filterByShow rejects a fabricated id match when the name disagrees (fake tt9999999)', () => {
+	const BODY_FAKE = {
+		status: true,
+		results: [{ name: 'Revolutionary Russian Roulette', imdb_id: 'tt9999999', tmdb_id: 1211376 }],
+		subtitles: [{ language: 'Arabic', url: '/subtitle/1884196-411163.zip', release_name: 'Pioneer.One.S01E01.Xvid-VODO' }],
+	};
+	const res = provider._filterByShow(BODY_FAKE, { imdbId: 'tt9999999' }, { filename: 'Some.Real.Movie.2014.1080p.mkv' });
+	assert.deepEqual(res, []);
+});
+
+test('_filterByShow without a filename falls back to the id check only', () => {
+	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { imdbId: 'tt2359704' }).length, 1);
 });
 
 test('_filterByShow passes bodies without results (older shape) through untouched', () => {
@@ -141,4 +178,19 @@ test('parses both documented response shapes', async () => {
 	assert.deepEqual(provider._parseResponse({ subtitles: [1] }), [1]);
 	assert.deepEqual(provider._parseResponse({ data: [2] }), [2]);
 	assert.deepEqual(provider._parseResponse({}), []);
+});
+
+test('the show-name gate can be disabled via config (TMDB-localized filenames)', () => {
+	const BODY_OPM = {
+		status: true,
+		results: [{ name: 'One-Punch Man', imdb_id: 'tt4508902', tmdb_id: 63926 }],
+		subtitles: [{ language: 'Arabic', url: '/subtitle/9-9.zip', release_name: 'OPM S01' }],
+	};
+	const res = provider._filterByShow(
+		BODY_OPM,
+		{ tmdbId: '63926' },
+		{ filename: 'JoJos.Bizarre.Adventure.S02E05.mkv' },
+		{ verifyShowNames: false },
+	);
+	assert.equal(res.length, 1, 'gate off → id echo alone decides');
 });

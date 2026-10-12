@@ -66,6 +66,21 @@ const CONFIG_SCHEMA = [
 		hidden: true,
 	},
 	{
+		key: 'verifyShowNames',
+		env: 'VERIFY_SHOW_NAMES',
+		type: 'checkbox',
+		default: true,
+		description: 'Reject provider results whose matched show name shares nothing with the playing filename (blocks wrong-show subtitles). Disable if subtitles go missing for content whose filename title is TMDB-localized.',
+	},
+	{
+		key: 'debug',
+		env: 'DEBUG',
+		type: 'checkbox',
+		default: false,
+		description: 'Log incoming requests and match-rejection decisions to the server console.',
+		hidden: true,
+	},
+	{
 		key: 'providerOrder',
 		env: 'PROVIDER_ORDER',
 		type: 'text',

@@ -100,6 +100,14 @@ function serveSubtitles(match, url, req, { iface, resolveConfig }, res) {
 	const resolved = resolveConfig(config);
 	resolved.addonBaseUrl = resolved.addonBaseUrl || requestBase(req);
 
+	if (resolved.debug) {
+		console.log(`[debug] subtitles ${type}/${rawId} extras=${JSON.stringify(extras)} config=${JSON.stringify({
+			languages: resolved.languages,
+			verifyShowNames: resolved.verifyShowNames,
+			encodingFallback: resolved.encodingFallback === true,
+		})}`);
+	}
+
 	iface.get('subtitles', type, rawId, extras, resolved)
 		.then((resp) => sendSubtitlesResponse(resp, res))
 		.catch((err) => {

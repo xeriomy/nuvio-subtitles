@@ -85,7 +85,9 @@ Precedence, highest first:
 | `staleRevalidate` | `STALE_REVALIDATE` | number | `86400` | `stale-while-revalidate` window (seconds). |
 | `staleError` | `STALE_ERROR` | number | `86400` | `stale-if-error` window (seconds). |
 | `encodingFallback` | `ENCODING_FALLBACK` | checkbox | `false` | Serve subtitle URLs through the client's local streaming-server encoding fallback — see [Encoding fallback](#encoding-fallback-12700111470subtitlesvtt). |
+| `verifyShowNames` | `VERIFY_SHOW_NAMES` | checkbox | `true` | Reject provider results whose matched show name shares nothing with the playing filename (blocks wrong-show subtitles, e.g. a provider mapping your id to a different show). **Disable if subtitles go missing** for content whose filename title is TMDB-localized by the client. |
 | `addonBaseUrl` | `ADDON_BASE_URL` | text | *(derived)* | Public base URL of this add-on, used to build the proxy download links below. Derived from each request when unset; set it explicitly when running behind a reverse proxy. Internal key — never shown in the config UI. |
+| `debug` | `DEBUG` | checkbox | `false` | Log incoming requests (id, filename, gates applied) and every match-rejection decision to the server console. Internal key — never shown in the config UI. Start with `DEBUG=true npm start` when subtitles are missing and read the console. |
 
 Plus the server's own non-config keys: `PORT` (default `3000`) and `CONFIG_JSON` (JSON object overriding all env vars above).
 
@@ -225,6 +227,7 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 
 | Error | Cause | What to do |
 |---|---|---|
+| Very few or no subtitles for an anime/obscure title | Either the providers genuinely have nothing indexed, or a fail-closed gate rejected the results (show-name mismatch, episode coverage, feature validation). | Restart with `DEBUG=true npm start`, open the picker, and read the console — every rejection is logged with its reason. If the show-name gate is the cause for TMDB-localized filenames, set `VERIFY_SHOW_NAMES=false`. |
 | `HTTP 406` on a subtitle | **OpenSubtitles daily download quota exhausted** for your API key (their gateway returns 406 when you're out of downloads; 429 when rate-limited). Browsing Nuvio's picker previews each entry — each *distinct* subtitle costs one download. | Wait for the 24h reset. The content cache makes each subtitle cost exactly one download no matter how often the player re-fetches, so quota lasts far longer than it used to. |
 | `HTTP 429` | Per-second rate limit on the same endpoint. | The cache usually prevents it; retry shortly. |
 | `No subtitle lines found` | (Historic) SubDL serves `.zip` archives and windows-1256 files. | Fixed: the proxy unpacks zips and converts everything to UTF-8 before serving. |

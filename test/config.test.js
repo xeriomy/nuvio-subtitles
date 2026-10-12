@@ -76,3 +76,14 @@ test('the manifest declares languages with Arabic as the default', () => {
 	assert.equal(langOpt.default, 'ar');
 	assert.ok(langOpt.options.includes('ar'), 'Arabic must be selectable');
 });
+
+test('verifyShowNames defaults on and parses from the environment', () => {
+	assert.equal(resolveConfig({}, {}).verifyShowNames, true);
+	assert.equal(resolveConfig({ VERIFY_SHOW_NAMES: 'false' }, {}).verifyShowNames, false);
+	assert.equal(resolveConfig({ VERIFY_SHOW_NAMES: 'true' }, {}).verifyShowNames, true);
+});
+
+test('debug mode defaults off and parses from the environment', () => {
+	assert.equal(resolveConfig({}, {}).debug, false);
+	assert.equal(resolveConfig({ DEBUG: '1' }, {}).debug, true);
+});

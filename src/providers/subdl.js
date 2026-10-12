@@ -66,7 +66,7 @@ function createSubdlProvider() {
 				throw err;
 			}
 
-			return this._filterByShow(body, media);
+			return this._filterByShow(body, media, extras, config);
 		},
 
 		/**
@@ -75,11 +75,21 @@ function createSubdlProvider() {
 		 * which show it matched (results[]), require it to be the requested one.
 		 * @returns {Array} the subtitle items, or [] when the show cannot be confirmed
 		 */
-		_filterByShow(body, media) {
+		/**
+		 * Fail-closed show validation. SubDL's id mapping is not trustworthy
+		 * (live evidence: it maps TMDB 63926 to One-Punch Man, and fabricates
+		 * matches for unknown ids by echoing them back), so the matched show's
+		 * NAME is checked against the filename the client sends — Latin script
+		 * only, so non-Latin filenames can never false-reject.
+		 * @returns {Array} subtitle items, or [] when the match cannot be trusted
+		 */
+		_filterByShow(body, media, extras = {}, config = {}) {
 			if (!body || body.status === false) return [];
 			const items = Array.isArray(body.subtitles) ? body.subtitles : (Array.isArray(body.data) ? body.data : []);
 
-			if (!Array.isArray(body.results) || !body.results.length || !media) return items;
+			if (!Array.isArray(body.results) || !media) return items;
+			if (!body.results.length) return []; // "matched nothing" — fail closed
+
 			const wantedImdb = media.imdbId ? String(media.imdbId).replace(/^tt/i, '').toLowerCase() : null;
 			const wantedTmdb = media.tmdbId !== undefined && media.tmdbId !== null ? String(media.tmdbId) : null;
 			const showMatches = body.results.some(r => {
@@ -87,7 +97,27 @@ function createSubdlProvider() {
 				if (wantedTmdb && r.tmdb_id !== undefined) return String(r.tmdb_id) === wantedTmdb;
 				return false;
 			});
-			return showMatches ? items : [];
+			if (!showMatches) return [];
+
+			// Name gate: the echoed id proves nothing, but the show NAME vs the
+			// playing filename does. Only comparable when both sides have Latin
+			// tokens (Arabic filenames would otherwise false-reject) — and it can
+			// be disabled entirely, because the filename title may be
+			// TMDB-localized by the client and thus unreliable.
+			if (config.verifyShowNames === false) return items;
+			const fileTokens = latinContentTokens(extras && extras.filename);
+			const names = body.results.map(r => r.name).filter(n => typeof n === 'string' && n);
+			if (fileTokens.length && names.length) {
+				const anyOverlap = names.some(name => {
+					const nameTokens = latinContentTokens(name);
+					return nameTokens.length && nameTokens.some(t => fileTokens.some(f => f === t || (t.length >= 4 && f.startsWith(t)) || (f.length >= 4 && t.startsWith(f))));
+				});
+				if (!anyOverlap) {
+					if (config.debug) console.log(`[subdl] rejected "${names.join('", "')}" — no name overlap with filename`);
+					return [];
+				}
+			}
+			return items;
 		},
 
 		mapHit(hit, { media, config } = {}) {
@@ -167,6 +197,24 @@ function toInt(value) {
 	if (value === undefined || value === null || value === '') return null;
 	const n = Number(value);
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+}
+
+// Codec/resolution/container noise that must never drive a show-name comparison.
+const TOKEN_STOPLIST = new Set([
+	'1080p', '720p', '2160p', '480p', 'bluray', 'blu-ray', 'brrip', 'bdrip', 'web',
+	'webdl', 'webrip', 'web-dl', 'hdr', 'hdr10', 'dv', 'remux', 'h264', 'x264',
+	'x265', 'h265', 'hevc', 'aac', 'aac5', 'ddp', 'dd5', '5', '1', '10bit', '8bit',
+	'dual', 'audio', 'sub', 'subs', 'full', 'season', 'episode', 'complete',
+	'mkv', 'mp4', 'avi', 'mov', 'm2ts', 'iso', 'vodo', 'xvid',
+]);
+
+/** Latin-script content words from a release/show name (Arabic etc. yields []). */
+function latinContentTokens(text) {
+	if (typeof text !== 'string' || !text) return [];
+	return text
+		.split(/[^a-zA-Z0-9']+/)
+		.map(t => t.replace(/^'+|'+$/g, '').toLowerCase())
+		.filter(t => t.length >= 3 && !/^\d+$/.test(t) && !TOKEN_STOPLIST.has(t));
 }
 
 module.exports = { createSubdlProvider };
