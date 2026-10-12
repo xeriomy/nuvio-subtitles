@@ -15,6 +15,7 @@
 
 const { unzip, pickSubtitleEntry } = require('../util/zip');
 const { decodeSubtitleBuffer } = require('../util/charset');
+const { convertAssToSrt } = require('../util/ass');
 
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000; // subtitle content is immutable
 const DEFAULT_MAX_CACHE_BYTES = 64 * 1024 * 1024; // across all entries
@@ -122,22 +123,22 @@ function createContentProxy(opts = {}) {
 		const contentType = name
 			? contentTypeFor(name)
 			: withUtf8Charset(upstream.contentType || 'application/x-subrip');
-		const text = isStylingSensitive(contentType) ? decoded : stripTags(decoded);
-		return { body: Buffer.from(text, 'utf8'), contentType };
+
+		// SRT/VTT pass through byte-faithful (charset conversion only) — an
+		// earlier blanket tag-strip here made Nuvio's sync feature worse, not
+		// better. ASS/SSA is converted to plain SRT: Nuvio chokes on {\...}
+		// overrides (its auto-sync regex), and anime subs are full of them.
+		if (isAss(contentType, name)) {
+			const srt = convertAssToSrt(decoded);
+			if (srt) {
+				return { body: Buffer.from(srt, 'utf8'), contentType: 'application/x-subrip; charset=utf-8' };
+			}
+		}
+		return { body: Buffer.from(decoded, 'utf8'), contentType };
 	}
 
-	// ASS/SSA braces are styling directives — stripping them would break the
-	// subtitle. In SRT/VTT they are leftovers that also trip clients'
-	// auto-sync features, so they go.
-	function isStylingSensitive(contentType) {
-		return /x-ssa/i.test(contentType);
-	}
-
-	function stripTags(text) {
-		return text
-			.replace(/\{[^{}\n]*\}/g, '')   // ASS override tags: {\an8}, {\i1}...
-			.replace(/<\/?[a-z][a-z0-9]*[^>\n]*>/gi, '') // html: <b>, <i>, <font ...>
-			.replace(/&nbsp;/gi, ' ');
+	function isAss(contentType, name) {
+		return /x-ssa/i.test(contentType) || /\.(ass|ssa)$/i.test(name || '');
 	}
 
 	function error(message, status) {

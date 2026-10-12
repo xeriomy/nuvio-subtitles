@@ -72,7 +72,7 @@ test('zip archives are unpacked and the largest subtitle entry is served, decode
 	assert.equal(res.body.toString('utf8').includes('junk'), false, 'non-subtitle entries are not served');
 });
 
-test('strips ASS override tags and HTML from SRT text (Nuvio auto-sync chokes on braces)', async () => {
+test('serves SRT byte-faithful — no tag stripping (reverted: it made Nuvio sync worse)', async () => {
 	const dirty = Buffer.from(
 		'1\n00:00:01,000 --> 00:00:02,000\n{\\an8}مرحبا {\\i1}بكم{\\i0} <b>في</b> الفيلم\n',
 		'utf8',
@@ -81,16 +81,27 @@ test('strips ASS override tags and HTML from SRT text (Nuvio auto-sync chokes on
 		fetchImpl: async () => ({ ok: true, buffer: dirty, contentType: 'application/x-subrip' }),
 	});
 	const res = await proxy.get('opensubtitles', '77', async () => 'https://dl.example.com/x.srt');
-	assert.equal(res.body.toString('utf8'), '1\n00:00:01,000 --> 00:00:02,000\nمرحبا بكم في الفيلم\n');
+	assert.equal(
+		res.body.toString('utf8'),
+		'1\n00:00:01,000 --> 00:00:02,000\n{\\an8}مرحبا {\\i1}بكم{\\i0} <b>في</b> الفيلم\n',
+		'SRT content must pass through untouched (charset conversion only)',
+	);
 });
 
-test('ASS/SSA styling tags are preserved (converting them would drop styling)', async () => {
-	const ass = Buffer.from('[Script Info]\nStyle: {\\an8}x\n');
+test('ASS subtitles are converted to plain SRT — braces gone, so Nuvio auto-sync cannot choke', async () => {
+	const ass = Buffer.from([
+		'[Events]',
+		'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+		'Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\an8}مرحبا {\\i1}بكم{\\i0}',
+	].join('\n'), 'utf8');
 	const proxy = createContentProxy({
 		fetchImpl: async () => ({ ok: true, buffer: ass, contentType: 'text/x-ssa', filename: 'sub.ass' }),
 	});
 	const res = await proxy.get('opensubtitles', '78', async () => 'https://dl.example.com/x.ass');
-	assert.match(res.body.toString('utf8'), /{\\an8}/, 'ASS tags must survive');
+	assert.equal(res.contentType, 'application/x-subrip; charset=utf-8', 'served as SRT, not raw ASS');
+	const text = res.body.toString('utf8');
+	assert.equal(text.includes('{'), false, 'no braces may survive');
+	assert.match(text, /مرحبا بكم/);
 });
 
 test('status errors carry the upstream status through (429 stays 429)', async () => {

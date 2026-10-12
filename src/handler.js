@@ -35,7 +35,7 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
 
 		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
-		const ordered = orderExactMatchesFirst(subtitles).map(stripInternalFields);
+		const ordered = orderExactMatchesFirst(subtitles, extras).map(stripInternalFields);
 		const finalSubtitles = config.encodingFallback === true
 			? ordered.map(s => applyEncodingFallback(s))
 			: ordered;
@@ -80,14 +80,39 @@ function langRank(lang, languages) {
 
 /**
  * Sort sync-perfect entries (OpenSubtitles hash match) ahead of the rest,
- * within the same language rank. Stable, so provider order survives.
+ * then entries whose release resembles the requested filename, within the
+ * same language rank. Stable, so provider order survives equal scores.
  */
-function orderExactMatchesFirst(subtitles) {
+function orderExactMatchesFirst(subtitles, extras = {}) {
+	const tokens = filenameTokens(extras && extras.filename);
 	return subtitles
 		.map((s, i) => ({ s, i }))
 		.sort((a, b) =>
-			((b.s.exactMatch === true) - (a.s.exactMatch === true)) || (a.i - b.i))
+			((b.s.exactMatch === true) - (a.s.exactMatch === true))
+			|| (releaseScore(b.s.label, tokens) - releaseScore(a.s.label, tokens))
+			|| (a.i - b.i))
 		.map(({ s }) => s);
+}
+
+/** Tokens from the client's filename that are meaningful for release matching. */
+function filenameTokens(filename) {
+	if (typeof filename !== 'string' || !filename) return [];
+	return filename
+		.split(/[^a-zA-Z0-9]+/)
+		.filter(t => t.length >= 2)
+		.map(t => t.toLowerCase())
+		.filter(t => !['mp4', 'mkv', 'avi', 'srt', 'ass'].includes(t));
+}
+
+/** How many filename tokens appear in the release label. */
+function releaseScore(label, tokens) {
+	if (!tokens.length || typeof label !== 'string') return 0;
+	const haystack = label.toLowerCase();
+	let score = 0;
+	for (const t of tokens) {
+		if (haystack.includes(t)) score += 1;
+	}
+	return score;
 }
 
 /** Remove internal markers before the response leaves the addon protocol. */

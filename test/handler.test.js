@@ -70,6 +70,42 @@ test('every entry has the required protocol fields', async () => {
 	}
 });
 
+test('entries whose release matches the requested filename sort ahead of non-matching ones', async () => {
+	const reg = {
+		searchAll: async () => ({
+			entries: [
+				{ id: 'p1-1', url: 'https://x/web', lang: 'ar', label: 'Other.Group.WEBRip' },
+				{ id: 'p1-2', url: 'https://x/remux', lang: 'ar', label: 'Show.2014.1080p.BluRay.REMUX.Group' },
+			],
+			failures: [],
+		}),
+		health: () => [],
+	};
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ languages: ['ar'], maxSubtitles: 20 }) });
+	const res = await handler({
+		type: 'movie', id: 'tt0111161',
+		extra: { filename: 'Show.2014.1080p.BluRay.REMUX.mkv' },
+		config: {},
+	});
+	assert.equal(res.subtitles[0].url, 'https://x/remux', 'release-matched subtitle comes first');
+});
+
+test('without a filename extra the provider order is preserved', async () => {
+	const reg = {
+		searchAll: async () => ({
+			entries: [
+				{ id: 'p1-1', url: 'https://x/web', lang: 'ar', label: 'WEBRip' },
+				{ id: 'p1-2', url: 'https://x/remux', lang: 'ar', label: 'REMUX' },
+			],
+			failures: [],
+		}),
+		health: () => [],
+	};
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ languages: ['ar'], maxSubtitles: 20 }) });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles[0].url, 'https://x/web');
+});
+
 test('exact matches (hash hit) sort before other subtitles in the same language', async () => {
 	const reg = {
 		searchAll: async () => ({

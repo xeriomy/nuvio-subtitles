@@ -66,13 +66,31 @@ function createSubdlProvider() {
 				throw err;
 			}
 
-			// SubDL wraps the list in { subtitles: [...] } on newer responses.
-			if (Array.isArray(body.subtitles)) return body.subtitles;
-			if (Array.isArray(body.data)) return body.data;
-			return [];
+			return this._filterByShow(body, media);
 		},
 
-		mapHit(hit, { config } = {}) {
+		/**
+		 * Fail-closed show validation: SubDL matches loosely by tmdb/imdb, and a
+		 * loose match serves a DIFFERENT show's subtitles. When the API tells us
+		 * which show it matched (results[]), require it to be the requested one.
+		 * @returns {Array} the subtitle items, or [] when the show cannot be confirmed
+		 */
+		_filterByShow(body, media) {
+			if (!body || body.status === false) return [];
+			const items = Array.isArray(body.subtitles) ? body.subtitles : (Array.isArray(body.data) ? body.data : []);
+
+			if (!Array.isArray(body.results) || !body.results.length || !media) return items;
+			const wantedImdb = media.imdbId ? String(media.imdbId).replace(/^tt/i, '').toLowerCase() : null;
+			const wantedTmdb = media.tmdbId !== undefined && media.tmdbId !== null ? String(media.tmdbId) : null;
+			const showMatches = body.results.some(r => {
+				if (wantedImdb && r.imdb_id) return String(r.imdb_id).replace(/^tt/i, '').toLowerCase() === wantedImdb;
+				if (wantedTmdb && r.tmdb_id !== undefined) return String(r.tmdb_id) === wantedTmdb;
+				return false;
+			});
+			return showMatches ? items : [];
+		},
+
+		mapHit(hit, { media, config } = {}) {
 			if (!hit || typeof hit !== 'object') return null;
 			const rawUrl = typeof hit.url === 'string' ? hit.url : '';
 			if (!rawUrl) return null;
@@ -80,6 +98,12 @@ function createSubdlProvider() {
 				? hit.language.trim().toLowerCase()
 				: (typeof hit.lang === 'string' ? hit.lang.trim().toLowerCase() : '');
 			if (!lang) return null;
+
+			// Episode-coverage filter: a pack for episodes 12-14 must not serve
+			// an episode 5 request (classic anime-pack mismatch).
+			if (media && media.season !== undefined && media.episode !== undefined) {
+				if (!coversEpisode(hit, media)) return null;
+			}
 
 			// The reported lang is a name ("Arabic") or "AR"; the item's
 			// `language` field also carries "AR". Normalise both to "ar".
@@ -117,6 +141,32 @@ function stableId(str) {
 		h = (h * 31 + str.charCodeAt(i)) | 0;
 	}
 	return (h >>> 0).toString(36);
+}
+
+/**
+ * Does this item's episode coverage include the requested episode?
+ * Fields per SubDL's real responses: season, episode, episode_from,
+ * episode_end, full_season. season 0 means "not stated".
+ */
+function coversEpisode(item, media) {
+	const season = toInt(item.season);
+	if (season && season !== Number(media.season)) return false;
+	if (item.full_season === true) return true;
+
+	const from = toInt(item.episode_from);
+	const to = toInt(item.episode_end);
+	if (from && to) return Number(media.episode) >= from && Number(media.episode) <= to;
+
+	const ep = toInt(item.episode);
+	if (ep) return Number(media.episode) === ep;
+
+	return true; // coverage unknown — the show match is the gate
+}
+
+function toInt(value) {
+	if (value === undefined || value === null || value === '') return null;
+	const n = Number(value);
+	return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
 }
 
 module.exports = { createSubdlProvider };

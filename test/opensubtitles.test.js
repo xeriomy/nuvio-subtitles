@@ -172,6 +172,37 @@ test('search query params are alphabetically ordered (the API 301s otherwise)', 
 	assert.deepEqual(keys, sorted);
 });
 
+test('validates the feature against the requested show via parent ids (episodes report their own ids)', () => {
+	// Real shape: GoT S01E01 hit carries feature imdb 1480055 (the episode) and
+	// parent_imdb_id 944947 (the show). A JoJo request must drop it.
+	const gotEpisodeHit = {
+		attributes: {
+			language: 'ar',
+			release: 'Winter.Is.Coming',
+			files: [{ file_id: 50 }],
+			feature_details: { title: 'Winter Is Coming', imdb_id: 1480055, parent_imdb_id: 944947, tmdb_id: 63056, parent_tmdb_id: 1399, season_number: 1, episode_number: 1 },
+		},
+	};
+	const jojoMedia = { ok: true, imdbId: 'tt2359704', season: 2, episode: 5 };
+	assert.equal(provider.mapHit(gotEpisodeHit, { media: jojoMedia, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } }), null, 'wrong-show episode dropped');
+
+	const gotMedia = { ok: true, imdbId: 'tt0944947', season: 1, episode: 1 };
+	assert.ok(provider.mapHit(gotEpisodeHit, { media: gotMedia, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } }), 'right show kept');
+});
+
+test('validates movies by their feature tmdb id', () => {
+	const shawshankHit = {
+		attributes: {
+			language: 'ar',
+			release: 'Shawshank.1994',
+			files: [{ file_id: 51 }],
+			feature_details: { title: 'The Shawshank Redemption', imdb_id: 111161, tmdb_id: 278 },
+		},
+	};
+	assert.ok(provider.mapHit(shawshankHit, { media: { ok: true, tmdbId: '278' }, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } }), 'matching movie kept');
+	assert.equal(provider.mapHit(shawshankHit, { media: { ok: true, tmdbId: '63926' }, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } }), null, 'different movie dropped');
+});
+
 test('marks machine-translated subtitles in the label', () => {
 	const entry = provider.mapHit({
 		attributes: { language: 'ar', url: 'https://x/1', files: [{ file_id: 5 }], ai_translated: true },

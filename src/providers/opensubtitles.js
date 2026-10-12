@@ -115,13 +115,26 @@ function createOpenSubtitlesProvider() {
 			}
 			if (typeof url !== 'string' || !url) return null;
 
-			// A hit whose feature is a different episode than the one requested
-			// is a wrong-show/wrong-episode subtitle — drop it rather than let
-			// it desync (the API can be loose with tmdb_id matching).
+			// Reject hits whose feature doesn't match the request — the API can
+			// match loosely on tmdb_id, and a loose match is a DIFFERENT show's
+			// subtitle. Episode hits report their own ids plus parent_* ids for
+			// the show (live-verified), so compare against either.
 			const feature = attrs.feature_details || {};
-			if (media && media.season !== undefined && feature.season !== undefined) {
-				if (Number(feature.season) !== Number(media.season) || Number(feature.episode) !== Number(media.episode)) {
-					return null;
+			if (media) {
+				const candidates = [feature.imdb_id, feature.parent_imdb_id].filter(v => v !== undefined && v !== null);
+				if (media.imdbId && candidates.length) {
+					const wanted = Number(String(media.imdbId).replace(/^tt/i, ''));
+					if (!candidates.some(v => Number(v) === wanted)) return null;
+				}
+				const tmdbCandidates = [feature.tmdb_id, feature.parent_tmdb_id].filter(v => v !== undefined && v !== null);
+				if (media.tmdbId && tmdbCandidates.length) {
+					if (!tmdbCandidates.some(v => String(v) === String(media.tmdbId))) return null;
+				}
+				if (media.season !== undefined) {
+					const fSeason = firstDefined(feature.season_number, feature.season);
+					const fEpisode = firstDefined(feature.episode_number, feature.episode);
+					if (fSeason !== undefined && Number(fSeason) !== Number(media.season)) return null;
+					if (fEpisode !== undefined && Number(fEpisode) !== Number(media.episode)) return null;
 				}
 			}
 
@@ -157,6 +170,13 @@ function normalizeLang(language) {
 	// forms straight, and provide a small fallback for the common full names.
 	const byName = { arabic: 'ar', english: 'en' };
 	return byName[code] || code;
+}
+
+function firstDefined(...values) {
+	for (const v of values) {
+		if (v !== undefined && v !== null) return v;
+	}
+	return undefined;
 }
 
 // Deterministic, collision-resistant id so duplicate hits dedupe cleanly.

@@ -89,6 +89,49 @@ test('drops a hit with no url or no language', () => {
 	assert.equal(provider.mapHit(null, { media: MEDIA, config: CONFIG }), null);
 });
 
+// --- fail-closed matching ---
+
+const BODY_WRONG_SHOW = {
+	status: true,
+	results: [{ sd_id: 1, name: 'Game of Thrones', type: 'tv', imdb_id: 'tt0944947', tmdb_id: 1399 }],
+	subtitles: [{ language: 'Arabic', url: '/subtitle/1-2.zip', release_name: 'EP 1' }],
+};
+const BODY_RIGHT_SHOW = {
+	status: true,
+	results: [{ sd_id: 2, name: 'JoJo', type: 'tv', imdb_id: 'tt2359704', tmdb_id: 63926 }],
+	subtitles: [{ language: 'Arabic', url: '/subtitle/3-4.zip', release_name: 'EP 5', season: 0, episode: 5, episode_from: 5, episode_end: 5 }],
+};
+
+test('_filterByShow returns nothing when the API matched a different show', () => {
+	assert.deepEqual(provider._filterByShow(BODY_WRONG_SHOW, { imdbId: 'tt2359704' }), [], 'GoT results must not serve for JoJo');
+});
+
+test('_filterByShow passes results through when the matched show is the requested one', () => {
+	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { imdbId: 'tt2359704' }).length, 1);
+	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { tmdbId: '63926' }).length, 1);
+});
+
+test('_filterByShow accepts id comparison with or without the tt prefix', () => {
+	assert.equal(provider._filterByShow(BODY_RIGHT_SHOW, { imdbId: '2359704' }).length, 1);
+});
+
+test('_filterByShow passes bodies without results (older shape) through untouched', () => {
+	assert.equal(provider._filterByShow({ subtitles: [1, 2] }, { imdbId: 'tt0000000' }).length, 2);
+});
+
+test('episode coverage: an item covering S2E5 survives an S2E5 request, an E12 pack does not', () => {
+	const media = { imdbId: 'tt2359704', season: 2, episode: 5 };
+	assert.ok(provider.mapHit({ language: 'Arabic', url: '/subtitle/a.zip', release_name: 'EP 5', season: 0, episode: 5, episode_from: 5, episode_end: 5 }, { media, config: CONFIG }));
+	assert.equal(provider.mapHit({ language: 'Arabic', url: '/subtitle/b.zip', release_name: 'EP 12', season: 0, episode: 12, episode_from: 12, episode_end: 12 }, { media, config: CONFIG }), null, 'wrong episode pack dropped');
+	assert.ok(provider.mapHit({ language: 'Arabic', url: '/subtitle/c.zip', release_name: 'S02 pack', full_season: true, season: 2 }, { media, config: CONFIG }), 'full season of the right season kept');
+	assert.equal(provider.mapHit({ language: 'Arabic', url: '/subtitle/d.zip', release_name: 'S01 pack', full_season: true, season: 1 }, { media, config: CONFIG }), null, 'full season of the wrong season dropped');
+});
+
+test('items with unknown coverage pass (the show match is the gate)', () => {
+	const media = { imdbId: 'tt2359704', season: 2, episode: 5 };
+	assert.ok(provider.mapHit({ language: 'Arabic', url: '/subtitle/e.zip', release_name: 'mystery' }, { media, config: CONFIG }));
+});
+
 test('parses both documented response shapes', async () => {
 	const calls = [];
 	provider._parseResponse = (body) => {
