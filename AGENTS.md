@@ -1,0 +1,34 @@
+# AGENTS.md
+
+Node 22, CommonJS, one runtime dep (`stremio-addon-sdk`). A Stremio/Nuvio **subtitles** add-on: multi-provider, Arabic-first, all behavior verified against live provider APIs (quirks below are measured, not assumed). User-facing docs live in `README.md`; design records in `docs/superpowers/`.
+
+## Commands
+
+- `npm test` — the suite (~180 tests, `node:test`, no network). **Do not use `node --test test/`** — it fails (`Cannot find module`). Use bare `node --test` or target a file: `node --test test/handler.test.js`, or one case: `node --test --test-name-pattern="exact matches" test/handler.test.js`.
+- `npm start` — runs on `PORT` (default 3000). **Port 3000 is taken by the OpenChamber UI on this host** — use e.g. `PORT=8788 npm start`. No auto-reload: restart after changes (`npm run dev` watches).
+- Live smoke test: `curl localhost:<port>/manifest.json`, `/healthz`, and `/subtitles/series/tt0944947:1:1.json` (demo id — returns fixtures with no credentials). `DEBUG=true npm start` logs every request (id, filename, gates) and every match rejection **with its reason** — use it whenever "why no subtitles" is unclear.
+
+## Secrets & configuration
+
+- Real API keys live only in `.env` (gitignored, loaded by a hand-rolled loader in `src/index.js` — no dotenv dep; it fills only unset keys). `.env.example` holds names with empty values. Before committing, verify the staged diff leaks nothing: `git diff --cached | grep -Ff <(grep -vE '^($|#)' .env)` must print nothing; `test/scaffold.test.js` enforces the `.env.example` invariant and a test asserts the manifest never embeds credentials.
+- `src/config/schema.js` is the single source of truth: it drives env parsing, the generated `manifest.config` UI, and `test/readme.test.js`, which fails unless every key (env name + `` `key` ``) appears in README.md. Adding a key = schema entry + README table row. Keys with `hidden: true` are excluded from `manifest.config`.
+- Layering: schema defaults < env < `CONFIG_JSON` < per-request config (the `/{json}/...` URL path segment clients send back). Defaults are NOT auto-applied by the SDK — `resolveConfig()` does it.
+
+## Architecture facts that change decisions
+
+- `src/server.js` implements its **own** `/subtitles/...` route because the SDK's `getRouter()` silently drops query-string extras (`?videoHash=...` arrives as `extra:{}` — verified). It merges both extras forms (path `videoHash=x&videoSize=y` and fully-encoded), then delegates `/manifest.json`, the config-prefix form and 404s to the official router. Don't "simplify" this away; do keep CORS + the `Cache-Control` derivation (`cacheMaxAge`/`staleRevalidate`/`staleError`) identical to the SDK's.
+- Providers implement one contract (`meta/isConfigured/supports/search/mapHit`) and register in `src/addon.js` → `registerDefaultProviders()`. The registry isolates failures (one provider hanging/rejecting never fails the request) and interleaves results round-robin so one chatty provider can't starve others under `maxSubtitles`.
+- Matching is **fail-closed by design**: unroutable ids, unconfirmed shows, and wrong-episode features return `{subtitles: []}` — never "close enough" content. Gates: fixtures demo-ids-only; OpenSubtitles feature validation via `parent_imdb_id`/`parent_tmdb_id` (episode hits report their own ids) + season/episode; SubDL show validation + episode-coverage filter + show-name-vs-filename gate (skipped for non-Latin filenames, toggle `VERIFY_SHOW_NAMES`). Empty list = "nothing trustworthy found", which is the desired UX.
+- `demoFixtures` provider serves only its demo ids (`tt0111161`/`tmdb:278`, GoT S01E01) — it once served GoT subs for JoJo; do not loosen it.
+- The content proxy (`/proxy/opensubtitles/:fileId`, `/proxy/subdl/...`) streams and caches bytes (24h, single-flight) — one upstream download per subtitle no matter how often the player re-fetches (Nuvio re-fetches on preview/playback/auto-sync). It also unpacks SubDL `.zip`s and converts ASS/SSA → plain brace-free SRT (Nuvio's sync regex crashes on `{\...}` tags). **SRT/VTT passes through byte-faithful** — a blanket tag-strip was tried and reverted (made sync worse). Charset: UTF-16/UTF-8 BOM sniffing, windows-1256 fallback.
+- `addonBaseUrl` (`ADDON_BASE_URL`) is a hidden config key; the request-derived base wins only when it's unset (reverse-proxy deployments set it explicitly).
+
+## Provider API quirks (live-verified)
+
+- **OpenSubtitles** (`api.opensubtitles.com/api/v1`): send the **numeric** imdb id (`tt0111161` → `111161`; the API 301-redirects and mangles `tt…`); params must be alphabetically ordered (also 301s otherwise). Search hits carry `files` under `attributes`; `attributes.url` is a web *page*, not a file. Real files need **POST** `/api/v1/download?file_id` (GET = 404; default user-agents are gateway-blocked) and consume a **daily download quota — HTTP 406 = quota exhausted, 429 = rate-limited**. Pass those statuses through; never blanket-502.
+- **SubDL** (`api.subdl.com/api/v1`): imdb id must keep the `tt` prefix (numeric → "can't find movie or tv"); needs `type=movie|tv`; returns relative `.zip` URLs with the caller's **api_key embedded** — strip and re-attach server-side only. Its id→show mapping is unreliable (maps ids to wrong shows, fabricates matches for unknown ids by echoing them) — hence the fail-closed validation above.
+- Tests must stay hermetic: inject `fetchImpl` / `contentProxy` / `opensubtitlesDownloader`. A "fake" that calls the real resolver once hit the live API — don't repeat that.
+
+## Docs
+
+`README.md` (install, full config table, provider setup, troubleshooting incl. 406/429 semantics), `docs/superpowers/specs/…` (design + measured protocol facts), `docs/superpowers/plans/…` (implementation history).
