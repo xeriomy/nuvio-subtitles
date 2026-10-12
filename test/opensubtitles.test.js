@@ -88,6 +88,34 @@ test('maps a REAL recorded hit (attributes.files shape) to a proxy entry, so the
 	assert.equal(entry.id, 'os-12628886');
 });
 
+test('flags a hash-matched hit (feature_details.moviehash_match) as an exact match', () => {
+	const entry = provider.mapHit({
+		attributes: {
+			language: 'ar',
+			release: 'Between.The.Stars.2014.2160p.BluRay',
+			files: [{ file_id: 42 }],
+			fps: 23.976,
+			feature_details: { moviehash_match: true },
+		},
+	}, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } });
+	assert.equal(entry.exactMatch, true, 'sync-perfect entries must be sortable');
+	assert.match(entry.label, /✓/, 'the picker must show which entry matches the exact file');
+});
+
+test('marks the fps on non-exact hits so frame-rate mismatches are visible', () => {
+	const entry = provider.mapHit({
+		attributes: {
+			language: 'ar',
+			release: 'Some.Other.Release',
+			files: [{ file_id: 43 }],
+			fps: 25,
+		},
+	}, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } });
+	assert.equal(entry.exactMatch, undefined);
+	assert.match(entry.label, /25 ?fps/);
+	assert.doesNotMatch(entry.label, /✓/);
+});
+
 test('falls back to the API url when no proxy base is configured', () => {
 	const entry = provider.mapHit({
 		attributes: { language: 'ar', url: 'https://www.opensubtitles.com/ar/subtitles/x', files: [{ file_id: 1 }] },

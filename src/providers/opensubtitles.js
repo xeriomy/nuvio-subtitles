@@ -92,8 +92,6 @@ function createOpenSubtitlesProvider() {
 
 			const release = typeof attrs.release === 'string' && attrs.release ? attrs.release : null;
 			const machine = Boolean(attrs.ai_translated);
-			let label = release || undefined;
-			if (machine) label = label ? `${label} (machine translated)` : 'machine translated';
 
 			// Live responses carry files under attributes (attributes.files).
 			// The download endpoint returns a temporary direct link that only
@@ -109,11 +107,21 @@ function createOpenSubtitlesProvider() {
 			}
 			if (typeof url !== 'string' || !url) return null;
 
+			// A hash match (feature_details.moviehash_match) is frame-accurate
+			// for the playing file — surface it so the handler can sort it
+			// first and the picker can show why.
+			const exactMatch = attrs.feature_details && attrs.feature_details.moviehash_match === true;
+			let label = release || undefined;
+			if (exactMatch) label = `✓ ${label || 'exact file match'}`;
+			else if (attrs.fps) label = label ? `${label} [${attrs.fps} fps]` : `[${attrs.fps} fps]`;
+			if (machine) label = label ? `${label} (machine translated)` : 'machine translated';
+
 			return {
 				id: `os-${fileId || stableId(url)}`,
 				url,
 				lang,
 				label,
+				...(exactMatch ? { exactMatch: true } : {}),
 			};
 		},
 

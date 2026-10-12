@@ -220,19 +220,38 @@ test('a configured OpenSubtitles API key shows up as configured in healthz', asy
 	await stop();
 });
 
-test('the proxy route redirects to the provider download link and never exposes the key', async () => {
-	let called = null;
-	const fakeDownloader = async (fileId, config) => {
-		called = { fileId, key: config.opensubtitlesApiKey };
-		return 'https://dl.example.com/temp/abc.srt';
+test('the OpenSubtitles proxy serves cached, normalised content with UTF-8 charset', async () => {
+	const served = [];
+	const fakeProxy = {
+		get: async (provider, key) => {
+			served.push({ provider, key });
+			return { body: Buffer.from('مرحبا', 'utf8'), contentType: 'text/plain; charset=utf-8' };
+		},
 	};
-	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, opensubtitlesDownloader: fakeDownloader });
-	const res = await fetch(`${base}/proxy/opensubtitles/12628886`, { redirect: 'manual' });
-	assert.equal(res.status, 302, 'must redirect to the temp link');
-	assert.equal(res.headers.get('location'), 'https://dl.example.com/temp/abc.srt');
-	assert.equal(called.fileId, '12628886');
-	assert.equal(called.key, 'key');
-	assert.equal((res.headers.get('location') || '').includes('key'), false, 'the API key must not appear in the redirect target');
+	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, contentProxy: fakeProxy });
+	const res = await fetch(`${base}/proxy/opensubtitles/12628886`);
+	assert.equal(res.status, 200);
+	assert.match(res.headers.get('content-type'), /charset=utf-8/);
+	const text = await res.text();
+	assert.equal(text, 'مرحبا');
+	assert.deepEqual(served, [{ provider: 'opensubtitles', key: '12628886' }], 'content proxy consulted once with the file id');
+	await stop();
+});
+
+test('upstream rate limiting passes through as 429 with Retry-After', async () => {
+	const fakeProxy = { get: async () => { const e = new Error('HTTP 429'); e.status = 429; throw e; } };
+	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, contentProxy: fakeProxy });
+	const res = await fetch(`${base}/proxy/opensubtitles/1`);
+	assert.equal(res.status, 429, 'must not blanket-map to 502');
+	assert.ok(res.headers.get('retry-after'), 'Retry-After present');
+	await stop();
+});
+
+test('an upstream failure without a status is still a 502', async () => {
+	const fakeProxy = { get: async () => { throw new Error('socket hang up'); } };
+	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, contentProxy: fakeProxy });
+	const res = await fetch(`${base}/proxy/opensubtitles/1`);
+	assert.equal(res.status, 502);
 	await stop();
 });
 
@@ -243,19 +262,26 @@ test('the proxy route rejects non-numeric file ids', async () => {
 	await stop();
 });
 
-test('the proxy route surfaces a provider download failure as 502, not a crash', async () => {
-	await start({ env: { OPENSUBTITLES_API_KEY: 'key' }, opensubtitlesDownloader: async () => { throw new Error('HTTP 403'); } });
-	const res = await fetch(`${base}/proxy/opensubtitles/1`, { redirect: 'manual' });
-	assert.equal(res.status, 502);
+test('the SubDL proxy serves the unpacked subtitle (zip handled server-side)', async () => {
+	const fakeProxy = {
+		get: async (provider, key) => {
+			assert.equal(provider, 'subdl');
+			assert.equal(key, 'subtitle/3699868-8620840.zip');
+			return { body: Buffer.from('1\n00:00:01,000 --> 00:00:02,000\nسلام'), contentType: 'application/x-subrip; charset=utf-8' };
+		},
+	};
+	await start({ env: { SUBDL_API_KEY: 'sk' }, contentProxy: fakeProxy });
+	const res = await fetch(`${base}/proxy/subdl/subtitle/3699868-8620840.zip`);
+	assert.equal(res.status, 200);
+	assert.match(res.headers.get('content-type'), /charset=utf-8/);
+	assert.match(await res.text(), /سلام/);
 	await stop();
 });
 
-test('the SubDL proxy route appends the key server-side and strips traversal attempts', async () => {
-	await start({ env: { SUBDL_API_KEY: 'sk' } });
-	const res = await fetch(`${base}/proxy/subdl/subtitle/3699868-8620840.zip`, { redirect: 'manual' });
-	assert.equal(res.status, 302);
-	const loc = res.headers.get('location');
-	assert.equal(loc, 'https://dl.subdl.com/subtitle/3699868-8620840.zip?api_key=sk');
+test('the SubDL proxy is unavailable without a key (503, not a crash)', async () => {
+	await start();
+	const res = await fetch(`${base}/proxy/subdl/subtitle/3699868-8620840.zip`);
+	assert.equal(res.status, 503);
 	await stop();
 });
 

@@ -16,6 +16,7 @@ const qs = require('node:querystring');
 const { buildAddon } = require('./addon');
 const { parseExtras } = require('./catalog');
 const { createOpenSubtitlesDownloader } = require('./providers/opensubtitlesDownload');
+const { createContentProxy } = require('./providers/contentProxy');
 
 // /[/config]/subtitles/{type}/{id}[/{extra}].json  — config is URL-encoded JSON
 const SUBTITLES_RE = /^\/(?:([^/]+)\/)?subtitles\/([^/]+)\/([^/]+?)(?:\/([^/]*))?\.json$/;
@@ -34,6 +35,7 @@ function createServer(opts = {}) {
 	const { manifest, interface: iface, registry, resolveConfig } = buildAddon(opts);
 	const sdkRouter = getRouter({ manifest, get: iface.get });
 	const opensubtitlesDownloader = opts.opensubtitlesDownloader || createOpenSubtitlesDownloader();
+	const contentProxy = opts.contentProxy || createContentProxy({ fetchImpl: httpFetch });
 
 	return function addonRequestListener(req, res) {
 		// The addon protocol requires CORS on every route, including manifest.
@@ -66,7 +68,7 @@ function createServer(opts = {}) {
 			return;
 		}
 
-		if (serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader })) return;
+		if (serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy })) return;
 
 		const match = SUBTITLES_RE.exec(pathname);
 		if (match) {
@@ -119,8 +121,13 @@ function requestBase(req) {
  * Handle the /proxy/... routes. Returns true when the request was handled.
  * These routes exist because provider files are only reachable with the
  * provider's API key, which must never leave this server.
+ *
+ * Content is fetched server-side, normalised (zips unpacked, charsets decoded
+ * to UTF-8) and cached — the player re-fetches subtitle URLs constantly
+ * (preview, playback, auto-sync), so redirecting it to the provider produced
+ * HTTP 429 rate limits and quota exhaustion.
  */
-function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader }) {
+function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy }) {
 	const os = OS_PROXY_RE.exec(pathname);
 	if (os) {
 		if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -132,19 +139,15 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 			return true;
 		}
 		const config = resolveConfig(undefined);
-		opensubtitlesDownloader(os[1], config)
-			.then((link) => {
-				res.writeHead(302, {
-					Location: link,
-					// temp links are short-lived; let the client cache briefly
-					'Cache-Control': 'max-age=300, public',
-				});
-				res.end();
-			})
-			.catch((err) => {
-				console.error('[proxy] opensubtitles download failed:', err && err.message ? err.message : err);
-				sendJson(res, 502, { err: 'subtitle download failed' });
-			});
+		if (!config.opensubtitlesApiKey) {
+			sendJson(res, 503, { err: 'OpenSubtitles is not configured' });
+			return true;
+		}
+		serveProxyContent(res, contentProxy.get('opensubtitles', os[1], async () => {
+			const link = await opensubtitlesDownloader(os[1], config);
+			if (!link) throw statusError('no download link available', 502);
+			return link;
+		}));
 		return true;
 	}
 
@@ -164,15 +167,40 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 			sendJson(res, 503, { err: 'SubDL is not configured' });
 			return true;
 		}
-		res.writeHead(302, {
-			Location: `https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`,
-			'Cache-Control': 'max-age=300, public',
-		});
-		res.end();
+		serveProxyContent(res, contentProxy.get('subdl', path, async () =>
+			`https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`));
 		return true;
 	}
 
 	return false;
+}
+
+/** Stream the resolved content with caching headers; pass upstream 429s through. */
+function serveProxyContent(res, promise) {
+	promise
+		.then((content) => {
+			res.writeHead(200, {
+				'Content-Type': content.contentType,
+				'Content-Length': content.body.length,
+				// player-side caching too: subtitle bytes are immutable
+				'Cache-Control': 'max-age=3600, public',
+				'Access-Control-Allow-Origin': '*',
+			});
+			res.end(content.body);
+		})
+		.catch((err) => {
+			const status = (err && err.status) || 502;
+			const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+			if (status === 429) headers['Retry-After'] = '60';
+			res.writeHead(status, headers);
+			res.end(JSON.stringify({ err: 'subtitle fetch failed' }));
+		});
+}
+
+function statusError(message, status) {
+	const err = new Error(message);
+	err.status = status;
+	return err;
 }
 
 function sendSubtitlesResponse(resp, res) {
@@ -237,6 +265,35 @@ function safeDecode(value) {
 		return decodeURIComponent(value);
 	} catch (e) {
 		return value;
+	}
+}
+
+/**
+ * fetch adapter for the content proxy: returns { buffer, contentType, filename }
+ * and throws `HTTP <status>` errors so status codes can be passed through.
+ */
+async function httpFetch(url) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(new Error('request timed out')), 20000);
+	try {
+		const res = await fetch(url, {
+			headers: { 'User-Agent': 'nuvio-subtitles-addon v1', Accept: '*/*' },
+			signal: controller.signal,
+			redirect: 'follow',
+		});
+		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		const buffer = Buffer.from(await res.arrayBuffer());
+		// SubDL puts the extension in the URL path; OpenSubtitles leaves it to the
+		// content type. The content proxy only needs a name for zip/sniffing.
+		let filename = '';
+		try {
+			const path = new URL(res.url || url).pathname;
+			const last = decodeURIComponent(path.split('/').pop() || '');
+			if (/\.[a-z0-9]{2,5}$/i.test(last)) filename = last;
+		} catch (e) { /* filename stays empty */ }
+		return { buffer, contentType: res.headers.get('content-type') || '', filename };
+	} finally {
+		clearTimeout(timer);
 	}
 }
 

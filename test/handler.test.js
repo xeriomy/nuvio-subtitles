@@ -70,6 +70,35 @@ test('every entry has the required protocol fields', async () => {
 	}
 });
 
+test('exact matches (hash hit) sort before other subtitles in the same language', async () => {
+	const reg = {
+		searchAll: async () => ({
+			entries: [
+				{ id: 'p1-2', url: 'https://x/other', lang: 'ar', label: 'other' },
+				{ id: 'p1-1', url: 'https://x/exact', lang: 'ar', label: '✓ exact', exactMatch: true },
+			],
+			failures: [],
+		}),
+		health: () => [],
+	};
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ languages: ['ar'], maxSubtitles: 20 }) });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles[0].url, 'https://x/exact', 'the sync-perfect subtitle comes first');
+});
+
+test('the internal exactMatch flag is stripped from the protocol response', async () => {
+	const reg = {
+		searchAll: async () => ({
+			entries: [{ id: 'p1-1', url: 'https://x/exact', lang: 'ar', label: '✓ exact', exactMatch: true }],
+			failures: [],
+		}),
+		health: () => [],
+	};
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ languages: ['ar'], maxSubtitles: 20 }) });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.deepEqual(Object.keys(res.subtitles[0]).sort(), ['id', 'label', 'lang', 'url'], 'only protocol fields');
+});
+
 test('Arabic subtitles are returned and come first by default', async () => {
 	const handler = setup([makeProvider('p1', [
 		{ url: 'https://x/1', lang: 'ar' },

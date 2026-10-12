@@ -31,7 +31,7 @@ curl "http://127.0.0.1:3000/subtitles/series/tt0944947:1:1.json"
 Tests:
 
 ```bash
-npm test           # node:test — 131 checks, no network required
+npm test           # node:test — 153 checks, no network required
 ```
 
 ## Install into Nuvio (install-by-URL)
@@ -124,8 +124,8 @@ Guarantees the registry makes:
 
 - **API**: official REST API — `https://api.opensubtitles.com/api/v1`.
 - **Credentials**: free API key from <https://www.opensubtitles.com> (user profile → API keys). Set `OPENSUBTITLES_API_KEY`.
-- **Matching**: numeric IMDB id (the `tt` prefix is stripped — the API redirects and mangles `tt…` ids) or TMDB id, plus **OpenSubtitles file hash** (`videoHash`/`videoSize` extras) when the client sends them — the most accurate match — falling back to `filename` search.
-- **Downloads**: entries point at this add-on's `/proxy/opensubtitles/{fileId}` route, which calls the POST-only `/api/v1/download` endpoint with your key (server-side) and 302-redirects the client to the temporary direct link. Resolved links are cached 10 minutes to conserve your account's **daily download quota**.
+- **Matching**: numeric IMDB id (the `tt` prefix is stripped — the API redirects and mangles `tt…` ids) or TMDB id, plus **OpenSubtitles file hash** (`videoHash`/`videoSize` extras) when the client sends them. Hash-matched entries are **sorted first and labelled `✓`** — those are frame-accurate for your exact file. Other entries carry their `[fps]` in the label (23.976 vs 25 mismatches are the classic "subtitles don't sync" cause).
+- **Downloads**: entries point at this add-on's `/proxy/opensubtitles/{fileId}` route, which calls the POST-only `/api/v1/download` endpoint with your key (server-side) and **streams the subtitle bytes itself** — converted to UTF-8 and cached for 24h. Nuvio re-fetches subtitle URLs constantly (preview, playback, auto-sync); the content cache absorbs those re-fetches, so you don't burn the **daily download quota** or trip rate limits (HTTP 429). Upstream 429s pass through with `Retry-After` rather than a blanket 502.
 - **Terms of service**: uses the documented public API with your key, identifies with a per-app `User-Agent`, respects rate limits and daily download quotas; no scraping. See <https://www.opensubtitles.com/terms>.
 
 ### Provider 2 — SubDL (live)
@@ -133,7 +133,7 @@ Guarantees the registry makes:
 - **API**: `https://api.subdl.com/api/v1`.
 - **Credentials**: free API key from <https://subdl.com>. Set `SUBDL_API_KEY`.
 - **Matching**: `tt`-prefixed IMDB id (SubDL rejects the bare numeric id) or TMDB id with a `type` param, plus season/episode for series.
-- **Downloads**: SubDL returns subtitle paths with **your api_key embedded in the URL**; the add-on strips it and serves entries via `/proxy/subdl/…`, re-attaching the key only server-side. Files are delivered as `.zip` archives by SubDL itself.
+- **Downloads**: SubDL returns subtitle paths with **your api_key embedded in the URL**; the add-on strips it and serves entries via `/proxy/subdl/…`, re-attaching the key only server-side. SubDL delivers `.zip` archives — the proxy **unpacks them server-side** and serves the inner subtitle file decoded to UTF-8, so players that can't read zips (and mis-encoded windows-1256 files) work instead of showing "No subtitle lines found".
 - **Terms of service**: official API with your key; no scraping. See <https://subdl.com/terms>.
 
 ### Provider 3 — Bundled fixtures (offline)
@@ -210,10 +210,10 @@ so the local streaming server guesses the encoding and converts to VTT.
 | Route | Purpose |
 |---|---|
 | `GET /manifest.json` | Addon manifest — `subtitles` resource, `types: [movie, series]`, `idPrefixes: [tt, tmdb]`, `manifest.config` declarations. Served by the official SDK router. |
-| `GET /subtitles/{type}/{id}.json` | Subtitle list. Extras accepted both as query string (`?videoHash=…&videoSize=…&filename=…`) and in the documented path form (`/videoHash=…&videoSize=….json`); query wins on conflict. |
+| `GET /subtitles/{type}/{id}.json` | Subtitle list. Extras accepted both as query string (`?videoHash=…&videoSize=…&filename=…`) and in the documented path form (`/videoHash=…&videoSize=….json`); query wins on conflict. Subtitles whose hash matches the playing file (when the client sends `videoHash`) are sorted first and labelled `✓`. |
 | `GET /{config}/subtitles/{type}/{id}.json` | Same, with the user's configuration JSON in the path (what clients send after configuration). |
-| `GET /proxy/opensubtitles/{fileId}` | Credential-holding proxy → 302 to OpenSubtitles' temporary direct download link (key stays server-side; 10-min link cache). |
-| `GET /proxy/subdl/{path}` | Credential-holding proxy → 302 to `dl.subdl.com` with the API key re-attached server-side. |
+| `GET /proxy/opensubtitles/{fileId}` | Credential-holding content proxy — fetches the file server-side (key stays here), unpacks/normalises to UTF-8, caches 24h; the player can re-fetch freely without burning OpenSubtitles' rate limits or daily download quota. |
+| `GET /proxy/subdl/{path}` | Credential-holding content proxy for SubDL — key re-attached server-side, `.zip` archives unpacked, subtitle entry served as UTF-8. |
 | `GET /healthz` | Provider status: enabled / configured / hash capability — the place to look when a live provider is silent. |
 | `OPTIONS *` | CORS preflight, answered on every route. |
 

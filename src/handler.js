@@ -35,9 +35,10 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
 
 		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
+		const ordered = orderExactMatchesFirst(subtitles).map(stripInternalFields);
 		const finalSubtitles = config.encodingFallback === true
-			? subtitles.map(s => applyEncodingFallback(s))
-			: subtitles;
+			? ordered.map(s => applyEncodingFallback(s))
+			: ordered;
 		return withCache({ subtitles: finalSubtitles }, config);
 	};
 }
@@ -60,6 +61,9 @@ function mergeEntries(entries, languages, max) {
 			url: entry.url,
 			lang: entry.lang,
 			...(entry.label ? { label: entry.label } : {}),
+			// internal marker: consumed by orderExactMatchesFirst, stripped before
+			// the response leaves the addon protocol
+			...(entry.exactMatch === true ? { exactMatch: true } : {}),
 		});
 	}
 
@@ -72,6 +76,24 @@ function mergeEntries(entries, languages, max) {
 function langRank(lang, languages) {
 	const idx = languages.indexOf(String(lang).toLowerCase());
 	return idx === -1 ? languages.length : idx;
+}
+
+/**
+ * Sort sync-perfect entries (OpenSubtitles hash match) ahead of the rest,
+ * within the same language rank. Stable, so provider order survives.
+ */
+function orderExactMatchesFirst(subtitles) {
+	return subtitles
+		.map((s, i) => ({ s, i }))
+		.sort((a, b) =>
+			((b.s.exactMatch === true) - (a.s.exactMatch === true)) || (a.i - b.i))
+		.map(({ s }) => s);
+}
+
+/** Remove internal markers before the response leaves the addon protocol. */
+function stripInternalFields(entry) {
+	const { exactMatch, ...protocol } = entry;
+	return protocol;
 }
 
 // The SDK-documented encoding fallback: ask the client's local streaming
@@ -108,4 +130,4 @@ function positiveInt(value, fallback) {
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
-module.exports = { createSubtitlesHandler, mergeEntries, langRank, applyEncodingFallback };
+module.exports = { createSubtitlesHandler, mergeEntries, langRank, applyEncodingFallback, orderExactMatchesFirst, stripInternalFields };
