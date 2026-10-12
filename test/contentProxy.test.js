@@ -72,6 +72,27 @@ test('zip archives are unpacked and the largest subtitle entry is served, decode
 	assert.equal(res.body.toString('utf8').includes('junk'), false, 'non-subtitle entries are not served');
 });
 
+test('strips ASS override tags and HTML from SRT text (Nuvio auto-sync chokes on braces)', async () => {
+	const dirty = Buffer.from(
+		'1\n00:00:01,000 --> 00:00:02,000\n{\\an8}مرحبا {\\i1}بكم{\\i0} <b>في</b> الفيلم\n',
+		'utf8',
+	);
+	const proxy = createContentProxy({
+		fetchImpl: async () => ({ ok: true, buffer: dirty, contentType: 'application/x-subrip' }),
+	});
+	const res = await proxy.get('opensubtitles', '77', async () => 'https://dl.example.com/x.srt');
+	assert.equal(res.body.toString('utf8'), '1\n00:00:01,000 --> 00:00:02,000\nمرحبا بكم في الفيلم\n');
+});
+
+test('ASS/SSA styling tags are preserved (converting them would drop styling)', async () => {
+	const ass = Buffer.from('[Script Info]\nStyle: {\\an8}x\n');
+	const proxy = createContentProxy({
+		fetchImpl: async () => ({ ok: true, buffer: ass, contentType: 'text/x-ssa', filename: 'sub.ass' }),
+	});
+	const res = await proxy.get('opensubtitles', '78', async () => 'https://dl.example.com/x.ass');
+	assert.match(res.body.toString('utf8'), /{\\an8}/, 'ASS tags must survive');
+});
+
 test('status errors carry the upstream status through (429 stays 429)', async () => {
 	const proxy = createContentProxy({
 		fetchImpl: async () => { throw new Error('HTTP 429'); },

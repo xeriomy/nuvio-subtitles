@@ -122,7 +122,22 @@ function createContentProxy(opts = {}) {
 		const contentType = name
 			? contentTypeFor(name)
 			: withUtf8Charset(upstream.contentType || 'application/x-subrip');
-		return { body: Buffer.from(decoded, 'utf8'), contentType };
+		const text = isStylingSensitive(contentType) ? decoded : stripTags(decoded);
+		return { body: Buffer.from(text, 'utf8'), contentType };
+	}
+
+	// ASS/SSA braces are styling directives — stripping them would break the
+	// subtitle. In SRT/VTT they are leftovers that also trip clients'
+	// auto-sync features, so they go.
+	function isStylingSensitive(contentType) {
+		return /x-ssa/i.test(contentType);
+	}
+
+	function stripTags(text) {
+		return text
+			.replace(/\{[^{}\n]*\}/g, '')   // ASS override tags: {\an8}, {\i1}...
+			.replace(/<\/?[a-z][a-z0-9]*[^>\n]*>/gi, '') // html: <b>, <i>, <font ...>
+			.replace(/&nbsp;/gi, ' ');
 	}
 
 	function error(message, status) {

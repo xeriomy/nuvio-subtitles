@@ -37,6 +37,24 @@ test('series requests merge the series fixtures from both sources', async () => 
 	assert.ok(mapped.some(m => m.id.startsWith('subdl-')), 'SubDL series entries');
 });
 
+test('abstains on ids it has no fixture for — it must never pollute real content', () => {
+	// the GoT-for-JoJo bug: recorded series subs served for an unrelated show
+	assert.equal(provider.supports({ media: { ok: true, imdbId: 'tt2359704', season: 2, episode: 5, type: 'series' } }), false, 'JoJo S2E5 must not get GoT subs');
+	assert.equal(provider.supports({ media: { ok: true, tmdbId: '63926', season: 2, episode: 5, type: 'series' } }), false);
+	assert.equal(provider.supports({ media: { ok: true, imdbId: 'tt0068641', type: 'movie' } }), false, 'Godfather must not get Shawshank subs');
+});
+
+test('serves the recorded fixtures only for their exact demo ids', () => {
+	assert.equal(provider.supports({ media: { ok: true, imdbId: 'tt0111161', type: 'movie' } }), true);
+	assert.equal(provider.supports({ media: { ok: true, tmdbId: '278', type: 'movie' } }), true);
+	assert.equal(provider.supports({ media: { ok: true, imdbId: 'tt0944947', season: 1, episode: 1, type: 'series' } }), true);
+	assert.equal(provider.supports({ media: { ok: true, tmdbId: '1399', season: 1, episode: 1, type: 'series' } }), true);
+});
+
+test('the same show at a different episode abstains', () => {
+	assert.equal(provider.supports({ media: { ok: true, imdbId: 'tt0944947', season: 2, episode: 5, type: 'series' } }), false);
+});
+
 test('serves Arabic subtitles for a movie request', async () => {
 	const hits = await provider.search({ media: MOVIE_MEDIA, config: {}, extras: {} });
 	assert.ok(hits.length > 0, 'must return hits');

@@ -37,7 +37,24 @@ function createDemoFixturesProvider({ openSubtitlesMapper, subdlMapper } = {}) {
 
 		isConfigured() { return true; },
 
-		supports({ media }) { return Boolean(media && (media.imdbId || media.tmdbId)); },
+		// Recorded fixtures describe ONE movie and ONE episode. Serving them
+		// for any id polluted real requests with wrong-show subtitles (GoT
+		// subs while playing JoJo), so we abstain outside the exact demo ids.
+		DEMO_IDS: {
+			movie: { imdb: 'tt0111161', tmdb: '278' },
+			series: { imdb: 'tt0944947', tmdb: '1399', season: 1, episode: 1 },
+		},
+
+		supports({ media } = {}) {
+			if (!media || !(media.imdbId || media.tmdbId)) return false;
+			const demo = this.DEMO_IDS[media.type] || (media.season !== undefined ? this.DEMO_IDS.series : this.DEMO_IDS.movie);
+			const idMatches = media.imdbId === demo.imdb || media.tmdbId === demo.tmdb;
+			if (!idMatches) return false;
+			if (media.type === 'series' || media.season !== undefined) {
+				return media.season === demo.season && media.episode === demo.episode;
+			}
+			return true;
+		},
 
 		/** @returns {{mapper: string, hits: Array}|null} */
 		_load(file) {

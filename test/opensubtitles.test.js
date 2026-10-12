@@ -130,6 +130,48 @@ test('falls back to the API url when the hit has no file_id', () => {
 	assert.equal(entry.url, 'https://www.opensubtitles.com/ar/subtitles/y');
 });
 
+test('drops hits whose feature is a different episode than requested', () => {
+	const entry = provider.mapHit({
+		attributes: {
+			language: 'ar',
+			release: 'Wrong.Show.S01E01',
+			files: [{ file_id: 44 }],
+			feature_details: { title: 'Game of Thrones', season: 1, episode: 1 },
+		},
+	}, { media: { ...MEDIA_SERIES, tmdbId: '63926' }, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } });
+	assert.equal(entry, null, 'a S01E01 feature must not be served for a S02E05 request');
+});
+
+test('keeps hits whose feature season and episode match the request', () => {
+	const entry = provider.mapHit({
+		attributes: {
+			language: 'ar',
+			release: 'Right.Show.S02E05',
+			files: [{ file_id: 45 }],
+			feature_details: { title: 'JoJo', season: 2, episode: 5 },
+		},
+	}, { media: { ...MEDIA_SERIES, tmdbId: '63926', season: 2, episode: 5 }, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } });
+	assert.equal(entry.lang, 'ar');
+});
+
+test('keeps hits without feature season info (movie searches)', () => {
+	const entry = provider.mapHit({
+		attributes: { language: 'ar', release: 'A.Movie.1994', files: [{ file_id: 46 }], feature_details: { title: 'Shawshank' } },
+	}, { media: MEDIA, config: { ...CONFIG, addonBaseUrl: 'http://h:1' } });
+	assert.ok(entry);
+});
+
+test('search query params are alphabetically ordered (the API 301s otherwise)', () => {
+	const stub = provider._buildSearchRequest({
+		media: { ...MEDIA_SERIES, type: 'series' },
+		config: CONFIG,
+		extras: {},
+	});
+	const keys = Object.keys(stub.query);
+	const sorted = [...keys].sort();
+	assert.deepEqual(keys, sorted);
+});
+
 test('marks machine-translated subtitles in the label', () => {
 	const entry = provider.mapHit({
 		attributes: { language: 'ar', url: 'https://x/1', files: [{ file_id: 5 }], ai_translated: true },

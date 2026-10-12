@@ -60,13 +60,21 @@ function createOpenSubtitlesProvider() {
 				Accept: 'application/json',
 			};
 
-			return { path: '/subtitles', url: `${API_ROOT}/subtitles`, query, headers };
+			// The API 301-redirects to alphabetically-ordered params; building
+			// them sorted avoids the round-trip (and any param-mangling in it).
+			const sortedQuery = {};
+			for (const k of Object.keys(query).sort()) sortedQuery[k] = query[k];
+
+			return { path: '/subtitles', url: `${API_ROOT}/subtitles`, query: sortedQuery, headers };
 		},
 
 		async search({ media, config, extras }) {
 			const req = this._buildSearchRequest({ media, config, extras });
 			const url = new URL(req.url);
 			for (const [k, v] of Object.entries(req.query)) url.searchParams.set(k, v);
+			// The API 301-redirects to alphabetically-ordered params; sorting up
+			// front avoids the round-trip (and any param-mangling in it).
+			url.searchParams.sort();
 
 			let body;
 			try {
@@ -84,7 +92,7 @@ function createOpenSubtitlesProvider() {
 			return data;
 		},
 
-		mapHit(hit, { config } = {}) {
+		mapHit(hit, { media, config } = {}) {
 			if (!hit || typeof hit !== 'object') return null;
 			const attrs = hit.attributes || {};
 			const lang = normalizeLang(attrs.language);
@@ -106,6 +114,16 @@ function createOpenSubtitlesProvider() {
 				url = attrs.url;
 			}
 			if (typeof url !== 'string' || !url) return null;
+
+			// A hit whose feature is a different episode than the one requested
+			// is a wrong-show/wrong-episode subtitle — drop it rather than let
+			// it desync (the API can be loose with tmdb_id matching).
+			const feature = attrs.feature_details || {};
+			if (media && media.season !== undefined && feature.season !== undefined) {
+				if (Number(feature.season) !== Number(media.season) || Number(feature.episode) !== Number(media.episode)) {
+					return null;
+				}
+			}
 
 			// A hash match (feature_details.moviehash_match) is frame-accurate
 			// for the playing file — surface it so the handler can sort it

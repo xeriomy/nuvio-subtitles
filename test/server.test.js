@@ -181,10 +181,10 @@ test('series requests are routed with season and episode', async () => {
 
 test('TMDB ids are routed identically to IMDB ids', async () => {
 	await start();
-	const movie = await (await fetch(`${base}/subtitles/movie/tmdb%3A550.json`)).json();
-	assert.ok(movie.subtitles.some(s => s.lang === 'ar'));
-	const series = await (await fetch(`${base}/subtitles/series/tmdb%3A1399%3A1%3A2.json`)).json();
-	assert.ok(series.subtitles.some(s => s.lang === 'ar'));
+	const movie = await (await fetch(`${base}/subtitles/movie/tmdb%3A278.json`)).json();
+	assert.ok(movie.subtitles.some(s => s.lang === 'ar'), 'demo TMDB movie id returns fixtures');
+	const series = await (await fetch(`${base}/subtitles/series/tmdb%3A1399%3A1%3A1.json`)).json();
+	assert.ok(series.subtitles.some(s => s.lang === 'ar'), 'demo TMDB series id returns fixtures');
 	await stop();
 });
 

@@ -136,9 +136,9 @@ Guarantees the registry makes:
 - **Downloads**: SubDL returns subtitle paths with **your api_key embedded in the URL**; the add-on strips it and serves entries via `/proxy/subdl/…`, re-attaching the key only server-side. SubDL delivers `.zip` archives — the proxy **unpacks them server-side** and serves the inner subtitle file decoded to UTF-8, so players that can't read zips (and mis-encoded windows-1256 files) work instead of showing "No subtitle lines found".
 - **Terms of service**: official API with your key; no scraping. See <https://subdl.com/terms>.
 
-### Provider 3 — Bundled fixtures (offline)
+### Provider 3 — Bundled fixtures (offline, demo ids only)
 
-`src/providers/demoFixtures.js` serves recorded, real-shaped payloads from `fixtures/providers/*.json` so the add-on returns Arabic subtitles with **no credentials and no network** — the zero-configuration experience, and a working reference for provider authors. Disable it with `DEMOFIXTURES_ENABLED=false` once your live providers have keys.
+`src/providers/demoFixtures.js` serves recorded, real-shaped payloads from `fixtures/providers/*.json` (genuine API excerpts, keys scrubbed) **only for its two demo items** — the movie `tt0111161`/`tmdb:278` and Game of Thrones S01E01 `tt0944947:1:1`/`tmdb:1399:1:1`. For every other id it abstains, so recorded demo content can never leak into real requests (an earlier build served GoT subtitles for JoJo — that was this provider, and this restriction is the fix). It exists so the add-on returns Arabic subtitles with **no credentials and no network**, and as a working reference for provider authors. Disable it with `DEMOFIXTURES_ENABLED=false`.
 
 ## Adding a new provider
 
@@ -220,6 +220,18 @@ so the local streaming server guesses the encoding and converts to VTT.
 CORS is `Access-Control-Allow-Origin: *` on every route (addon-protocol requirement), and `Cache-Control` is derived from the response's `cacheMaxAge` / `staleRevalidate` / `staleError` exactly as the SDK router does — e.g. `max-age=3600, stale-while-revalidate=86400, stale-if-error=86400, public`.
 
 The SDK's router ignores query-string extras (verified against `stremio-addon-sdk@1.6.10`), so this add-on serves the subtitles route itself and delegates `/manifest.json`, the config-path form and 404s to the official `getRouter()` — protocol behavior stays SDK-owned where the SDK works.
+
+## Troubleshooting (errors you may see in the player)
+
+| Error | Cause | What to do |
+|---|---|---|
+| `HTTP 406` on a subtitle | **OpenSubtitles daily download quota exhausted** for your API key (their gateway returns 406 when you're out of downloads; 429 when rate-limited). Browsing Nuvio's picker previews each entry — each *distinct* subtitle costs one download. | Wait for the 24h reset. The content cache makes each subtitle cost exactly one download no matter how often the player re-fetches, so quota lasts far longer than it used to. |
+| `HTTP 429` | Per-second rate limit on the same endpoint. | The cache usually prevents it; retry shortly. |
+| `No subtitle lines found` | (Historic) SubDL serves `.zip` archives and windows-1256 files. | Fixed: the proxy unpacks zips and converts everything to UTF-8 before serving. |
+| Subtitles for the **wrong show** | (Historic) the fixtures provider answered for any series/movie id. | Fixed: fixtures now abstain outside their demo ids (`tt0111161`, `tmdb:278`, GoT S01E01). |
+| `Syntax error in regexp pattern` under Auto Sync | Nuvio's own regex crashing on `{…}` ASS tags inside SRT text. | Fixed server-side: braces and HTML tags are stripped from SRT/VTT content (ASS/SSA styling tags are preserved — stripping those would drop styling). If it still appears, it is a Nuvio client bug. |
+| Subtitles exist but don't sync | Release/framerate mismatch (25fps subs on a 23.976fps file), or the upload was cut for a different encode. | Entries matching your exact file (hash match) sort first and are labelled `✓` in Stremio. Note Nuvio's picker currently ignores the `label` field — it shows only "Arabic (Nuvio Subtitles)" — but ordering still applies. |
+| Very few or no subtitles for an anime/obscure title | The providers genuinely have nothing indexed for that episode (verified: OpenSubtitles has 0 Arabic subs for JoJo S2E5). | Correct behaviour — no wrong-show filler. Try another episode/movie, or another provider's key. |
 
 ## Live verification status
 
