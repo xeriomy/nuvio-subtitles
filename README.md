@@ -276,6 +276,8 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 | AI translation never appears | Policy is `off`, the preferred language is English, the model endpoint has no key, or native preferred-language subtitles exist (fallback policy adds nothing then). | Check `/healthz` → `translators`, and the `aiTranslate` policy. |
 | Very few or no subtitles for an anime/obscure title | The providers genuinely have nothing indexed for that episode (verified: OpenSubtitles has 0 Arabic subs for JoJo S2E5). | Correct behaviour — no wrong-show filler. Try another episode/movie, or another provider's key. |
 
+## Live verification status
+
 **Re-verified 2026-10-14 on the AI-translation/configure branch** (live OpenSubtitles + SubDL keys; the AI endpoint was a local OpenAI-compatible mock — see the note at the end):
 
 | Check | Result |
