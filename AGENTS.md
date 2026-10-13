@@ -4,13 +4,14 @@ Node 22, CommonJS, one runtime dep (`stremio-addon-sdk`). A Stremio/Nuvio **subt
 
 ## Commands
 
-- `npm test` — the suite (~180 tests, `node:test`, no network). **Do not use `node --test test/`** — it fails (`Cannot find module`). Use bare `node --test` or target a file: `node --test test/handler.test.js`, or one case: `node --test --test-name-pattern="exact matches" test/handler.test.js`.
+- `npm test` — the suite (~250 tests, `node:test`, no network). **Do not use `node --test test/`** — it fails (`Cannot find module`). Use bare `node --test` or target a file: `node --test test/handler.test.js`, or one case: `node --test --test-name-pattern="exact matches" test/handler.test.js`.
 - `npm start` — runs on `PORT` (default 3000). **Port 3000 is taken by the OpenChamber UI on this host** — use e.g. `PORT=8788 npm start`. No auto-reload: restart after changes (`npm run dev` watches).
-- Live smoke test: `curl localhost:<port>/manifest.json`, `/healthz`, and `/subtitles/series/tt0944947:1:1.json` (demo id — returns fixtures with no credentials). `DEBUG=true npm start` logs every request (id, filename, gates) and every match rejection **with its reason** — use it whenever "why no subtitles" is unclear.
+- Live smoke test: `curl localhost:<port>/manifest.json`, `/healthz`, `/configure` (200 HTML), and `/subtitles/series/tt0944947:1:1.json` (demo id — returns fixtures with no credentials). `DEBUG=true npm start` logs every request (id, filename, gates), every match rejection **with its reason**, and per-provider/proxy/translation **latencies with cache hit/miss** — use it whenever "why no subtitles" or "why slow" is unclear.
 
 ## Secrets & configuration
 
-- Real API keys live only in `.env` (gitignored, loaded by a hand-rolled loader in `src/index.js` — no dotenv dep; it fills only unset keys). `.env.example` holds names with empty values. Before committing, verify the staged diff leaks nothing: `git diff --cached | grep -Ff <(grep -vE '^($|#)' .env)` must print nothing; `test/scaffold.test.js` enforces the `.env.example` invariant and a test asserts the manifest never embeds credentials.
+- Real API keys live only in `.env` (gitignored, loaded by a hand-rolled loader in `src/index.js` — no dotenv dep; it fills only unset keys). `.env.example` holds names with empty values. Before committing, verify the staged diff leaks nothing: `git diff --cached | grep -Ff <(grep -vE '^($|#)' .env)` must print nothing; `test/scaffold.test.js` enforces the `.env.example` invariant (now incl. `AI_API_KEY`) and tests assert the **manifest defaults** never embed credentials.
+- Secrets scope (user-accepted trade-off, 2026-10-14): the repo and the manifest defaults never carry secrets, but a user-generated **install URL may embed keys** the operator typed on `/configure` — the page warns explicitly, and `test/configure.test.js` pins that env secret *values* never leak into the page HTML. `/configure` prefills non-secret env values only, is served with `Cache-Control: no-store`.
 - `src/config/schema.js` is the single source of truth: it drives env parsing, the generated `manifest.config` UI, and `test/readme.test.js`, which fails unless every key (env name + `` `key` ``) appears in README.md. Adding a key = schema entry + README table row. Keys with `hidden: true` are excluded from `manifest.config`.
 - Layering: schema defaults < env < `CONFIG_JSON` < per-request config (the `/{json}/...` URL path segment clients send back). Defaults are NOT auto-applied by the SDK — `resolveConfig()` does it.
 
@@ -22,6 +23,10 @@ Node 22, CommonJS, one runtime dep (`stremio-addon-sdk`). A Stremio/Nuvio **subt
 - `demoFixtures` provider serves only its demo ids (`tt0111161`/`tmdb:278`, GoT S01E01) — it once served GoT subs for JoJo; do not loosen it.
 - The content proxy (`/proxy/opensubtitles/:fileId`, `/proxy/subdl/...`) streams and caches bytes (24h, single-flight) — one upstream download per subtitle no matter how often the player re-fetches (Nuvio re-fetches on preview/playback/auto-sync). It also unpacks SubDL `.zip`s and converts ASS/SSA → plain brace-free SRT (Nuvio's sync regex crashes on `{\...}` tags). **SRT/VTT passes through byte-faithful** — a blanket tag-strip was tried and reverted (made sync worse). Charset: UTF-16/UTF-8 BOM sniffing, windows-1256 fallback.
 - `addonBaseUrl` (`ADDON_BASE_URL`) is a hidden config key; the request-derived base wins only when it's unset (reverse-proxy deployments set it explicitly).
+- Translators mirror the provider registry (`meta/isConfigured/translate` contract, register in `src/addon.js` → `registerDefaultTranslators()`); the shipped driver is OpenAI-compatible (`aiApiKey`/`aiBaseUrl`/`aiModel`). Translation runs **only at content-proxy fetch time** via `?ai=<json>` on a proxy URL — the listing never calls the translator, so it can never delay or fail native results.
+- The `?ai=` blob is built by the handler (`{l: targetLang}`, plus `k/m/b` ONLY for translator fields that differ from the env-resolved config — request config wins at fetch time, same layering as `/{config}/...`; env-held keys never travel in URLs). Bad blobs → 400 before any fetch; no translator → 503; SRT/VTT only.
+- The EN source search runs **only when the policy needs it** (`always`, or `fallback` with no native preferred-language entry), strictly **after** the native merge. Measured twice: mixing `en` into the primary search changes which native results the OS API returns, and running it in parallel makes a flaky provider return a short list — both perturbed native listings, both were reverted.
+- Translation results are cached by `sha256(driver|model|lang|content)` with single-flight (24h, LRU); failures are never cached; the model must return a JSON array 1:1 with the sent cue texts — anything else is rejected (a shifted array would desync timings). Non-text lines (index, `-->` timings, VTT headers/NOTE) pass through byte-exact by construction (`src/util/cues.js`).
 
 ## Provider API quirks (live-verified)
 
@@ -31,4 +36,4 @@ Node 22, CommonJS, one runtime dep (`stremio-addon-sdk`). A Stremio/Nuvio **subt
 
 ## Docs
 
-`README.md` (install, full config table, provider setup, troubleshooting incl. 406/429 semantics), `docs/superpowers/specs/…` (design + measured protocol facts), `docs/superpowers/plans/…` (implementation history).
+`README.md` (install, /configure page, full config table, AI translation guarantees, provider setup, troubleshooting incl. 406/429 semantics), `docs/superpowers/specs/…` (design + measured protocol facts + the measured performance record), `docs/superpowers/plans/…` (implementation history).

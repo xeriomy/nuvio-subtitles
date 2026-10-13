@@ -52,7 +52,7 @@ npm test           # node:test — 153 checks, no network required
 
 3. Tap **Install**. The add-on appears as *Nuvio Subtitles* and subtitle results start appearing in the player's subtitle picker (subtitle icon → subtitle list) for movies and series resolved by IMDB (`tt…`) or TMDB (`tmdb:…`) ids.
 
-4. Optional per-user configuration: **Add-ons → Nuvio Subtitles → Configure**. The user's choices are sent back with every request (the `/{config}/…` URL form) and override the server's environment for that user.
+4. Optional per-user configuration: **Add-ons → Nuvio Subtitles → Configure**, or simply open **`http://<host>:<port>/configure`** in a browser — the self-hosted page builds a ready-made install URL with your choices (including API keys) baked in; see [The /configure page](#the-configure-page). The user's choices are sent back with every request (the `/{config}/…` URL form) and override the server's environment for that user.
 
 The same URL works in Stremio (`stremio://<host>:<port>/manifest.json` opens Stremio directly) and any Stremio-protocol client.
 
@@ -211,6 +211,37 @@ so the local streaming server guesses the encoding and converts to VTT.
 - **ASS/SSA files are never wrapped** — converting them to VTT drops their styling (per the SDK docs).
 - Default is **off** because it requires the client to run Stremio's local streaming server; enable it per user via the config UI (`encodingFallback`), or globally with `ENCODING_FALLBACK=true`.
 
+## AI translation (English → preferred language)
+
+When a preferred-language subtitle doesn't exist natively, the add-on can translate an English one with an AI model. Everything is driven by four config keys (see the table above): `aiTranslate` (the trigger policy), `aiApiKey`, `aiBaseUrl` and `aiModel` — the endpoint just has to speak the OpenAI `POST {base}/chat/completions` protocol, which OpenAI, OpenRouter, Ollama, LM Studio and friends all do.
+
+**Trigger policy** (`aiTranslate`):
+
+- `fallback` *(default)* — only when the listing has **no** native entry in the preferred language (first entry of `languages`). The best English result from a dedicated English search gains one extra entry labelled `(AI translated)`.
+- `always` — the translated entry is added even next to native ones.
+- `off` — never; the provider search stays exactly as it would be without the feature.
+
+**Hard guarantees, verified live and by tests:**
+
+- **Native listings are never changed.** The primary provider search is byte-identical to a translation-less deployment; the English search runs only when the policy needs a source, strictly after the native results are merged. (Measured lesson: running the EN search in parallel perturbs flaky providers' native results, and mixing `en` into one search changes which native results the APIs return — both were measured and rejected.)
+- **Timings are byte-exact.** Translation runs when a subtitle file is *fetched* (inside the content proxy, after charset/zip/ASS normalisation): only cue *text* lines are sent to the model; index lines, `-->` timing lines, VTT headers/NOTE blocks and cue settings pass through untouched. Live-verified on a 1594-cue file: all timing lines byte-identical to the source.
+- **Fail-isolated.** The listing never calls the translator — only the fetch of the translated variant does. A translation failure (bad key → 401, quota → 429, unusable model output → 502) fails that one fetch and passes its status through; native entries keep working.
+- **The AI is called at most once per subtitle.** Results are cached by `sha256(driver | model | language | content)`; repeat fetches (Nuvio re-fetches constantly) are served from cache in single-digit milliseconds with zero model calls.
+
+**Key handling:** the server env (`AI_API_KEY`) never travels in URLs. When a user configures a key per-client (via `/configure`, below), only the fields that differ from the server env are carried inside the variant's `?ai=` parameter — the same trade-off as the `/{config}/…` path form this protocol already uses.
+
+## The /configure page
+
+Open **`http://<host>:<port>/configure`** in a browser: a self-hosted form generated from the same config schema as the manifest — every key is there, including API keys and the internal ones. Only values that differ from the default are embedded. The page builds a working install URL of the form
+
+```
+http://<host>:<port>/{urlencoded config JSON}/manifest.json
+```
+
+which Nuvio (and Stremio) install like any manifest URL, with your choices baked in and sent back on every request.
+
+> ⚠️ **The generated URL contains any API keys you typed.** Anyone who obtains the URL can use those keys against your accounts — only share it with your own devices. Leaving a key empty means the server's own environment value (or "not configured") is used. The repository and the manifest defaults never contain secrets; only this user-generated URL can.
+
 ## HTTP surface
 
 | Route | Purpose |
@@ -218,9 +249,10 @@ so the local streaming server guesses the encoding and converts to VTT.
 | `GET /manifest.json` | Addon manifest — `subtitles` resource, `types: [movie, series]`, `idPrefixes: [tt, tmdb]`, `manifest.config` declarations. Served by the official SDK router. |
 | `GET /subtitles/{type}/{id}.json` | Subtitle list. Extras accepted both as query string (`?videoHash=…&videoSize=…&filename=…`) and in the documented path form (`/videoHash=…&videoSize=….json`); query wins on conflict. Subtitles whose hash matches the playing file (when the client sends `videoHash`) are sorted first and labelled `✓`. |
 | `GET /{config}/subtitles/{type}/{id}.json` | Same, with the user's configuration JSON in the path (what clients send after configuration). |
-| `GET /proxy/opensubtitles/{fileId}` | Credential-holding content proxy — fetches the file server-side (key stays here), unpacks/normalises to UTF-8, caches 24h; the player can re-fetch freely without burning OpenSubtitles' rate limits or daily download quota. |
-| `GET /proxy/subdl/{path}` | Credential-holding content proxy for SubDL — key re-attached server-side, `.zip` archives unpacked, subtitle entry served as UTF-8. |
-| `GET /healthz` | Provider status: enabled / configured / hash capability — the place to look when a live provider is silent. |
+| `GET /configure` | Self-hosted configuration page (see above) — form over the whole config schema, emits the install URL. Never cached; env secret values are never embedded in the page. |
+| `GET /proxy/opensubtitles/{fileId}` | Credential-holding content proxy — fetches the file server-side (key stays here), unpacks/normalises to UTF-8, caches 24h; the player can re-fetch freely without burning OpenSubtitles' rate limits or daily download quota. Appending `?ai=…` serves the AI-translated variant (see [AI translation](#ai-translation-english--preferred-language)). |
+| `GET /proxy/subdl/{path}` | Credential-holding content proxy for SubDL — key re-attached server-side, `.zip` archives unpacked, subtitle entry served as UTF-8. Also accepts `?ai=…`. |
+| `GET /healthz` | Provider status (enabled / configured / hash capability) plus `translators` (configured or not) — the place to look when a live provider or AI translation is silent. |
 | `OPTIONS *` | CORS preflight, answered on every route. |
 
 CORS is `Access-Control-Allow-Origin: *` on every route (addon-protocol requirement), and `Cache-Control` is derived from the response's `cacheMaxAge` / `staleRevalidate` / `staleError` exactly as the SDK router does — e.g. `max-age=3600, stale-while-revalidate=86400, stale-if-error=86400, public`.
@@ -238,19 +270,26 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 | Subtitles for the wrong show / wrong episode | (Historic, two causes) the fixtures provider answered for any id, and SubDL's loose TMDB matching could return a different show or episode packs. | Fixed: fixtures abstain outside their demo ids; SubDL results are validated against the requested show and filtered by episode coverage; OpenSubtitles hits are validated against the requested feature (parent ids for episodes). |
 | `Syntax error in regexp pattern` under Auto Sync | Nuvio's own regex crashing on `{…}` ASS tags — anime subtitles are ASS-format, saturated with them. | Fixed server-side: ASS/SSA files are converted to plain, brace-free SRT before serving (timing kept, styling dropped). A blanket strip on SRT text was tried and reverted — SRT passes through byte-faithful. If the error still appears on plain SRT content, it is a Nuvio client bug. |
 | Subtitles exist but don't sync | Release/framerate mismatch (25fps subs on a 23.976fps file), or the upload was cut for a different encode. | Entries matching your exact file (hash match) sort first and are labelled `✓` in Stremio. Note Nuvio's picker currently ignores the `label` field — it shows only "Arabic (Nuvio Subtitles)" — but ordering still applies. |
+| The `(AI translated)` entry fails with `HTTP 401` | Wrong `AI_API_KEY` for the configured endpoint. | Fix the key (server env or `/configure`). |
+| The `(AI translated)` entry fails with `HTTP 429` | The AI endpoint's rate limit or quota is exhausted. | The native entries are unaffected; retry after the endpoint's quota resets. Translation results are cached, so each subtitle costs at most one successful model call. |
+| The `(AI translated)` entry fails with `HTTP 502` | The model ignored the JSON-array protocol (returned the wrong number of lines or non-JSON) — a too-weak model. | Pick a capable instruct model in `AI_MODEL`; the add-on never serves a translation whose cue count doesn't match its source. |
+| AI translation never appears | Policy is `off`, the preferred language is English, the model endpoint has no key, or native preferred-language subtitles exist (fallback policy adds nothing then). | Check `/healthz` → `translators`, and the `aiTranslate` policy. |
 | Very few or no subtitles for an anime/obscure title | The providers genuinely have nothing indexed for that episode (verified: OpenSubtitles has 0 Arabic subs for JoJo S2E5). | Correct behaviour — no wrong-show filler. Try another episode/movie, or another provider's key. |
 
-## Live verification status
+**Re-verified 2026-10-14 on the AI-translation/configure branch** (live OpenSubtitles + SubDL keys; the AI endpoint was a local OpenAI-compatible mock — see the note at the end):
 
-**Performed 2026-10-11 with real credentials supplied by the operator** (kept in the gitignored `.env`, never committed):
-
-| Request | Result |
+| Check | Result |
 |---|---|
-| `GET /subtitles/movie/tt0111161.json?videoHash=…&videoSize=…&filename=…` (Shawshank Redemption) | 200 — **20 entries, all `lang: ar`, 10 from OpenSubtitles + 10 from SubDL**, in ~1.3 s |
-| `GET /subtitles/series/tt0944947:1:1.json` (Game of Thrones S01E01) | 200 — **20 entries, all `lang: ar`, 10 from each provider** in ~0.3 s |
-| `GET /subtitles/movie/tmdb%3A278.json` (TMDB-only movie id) | 200 — both providers |
-| Proxy follow-through, OpenSubtitles | `GET /proxy/opensubtitles/12628886` → 302 → the API's temporary link → **real 147 KB Arabic SRT** (`text/plain; charset=utf-8`) |
-| Proxy follow-through, SubDL | `GET /proxy/subdl/subtitle/3699868-8620840.zip` → 302 → **real 186 KB ZIP** (`application/zip`) |
+| Native Arabic listings unchanged by the feature | Same process, seconds apart: `aiTranslate: off` vs default (key set) — **byte-identical 20-entry listings** (Shawshank, GoT S01E01, Inception). The old-vs-new code A/B differences measured earlier were upstream catalog churn, not code. |
+| `GET /configure` | 200 `text/html; charset=utf-8` — every config key + env name present, warning shown, env secret values absent (test-pinned) |
+| Generated install URL form `/{config}/manifest.json` | 200 manifest (`community.nuvio.subtitles`) with properly-encoded configs incl. `%2F` inside `aiBaseUrl` |
+| AI variant in the listing (`aiTranslate: always`) | 21 entries = 20 natives + 1 `(AI translated)`; variant URL = source proxy URL + `?ai={"l":"ar"}` (env-held key NOT in the URL; a per-client `aiBaseUrl` WAS carried as `b`) |
+| Translated fetch | 200 in 1.45 s (source download + 49 model batches); **1594 cues, timing lines byte-identical to the source file**; texts replaced |
+| Cache-by-hash re-fetch | 7.1 ms, **0 model calls** (`translate … (cache hit)` in DEBUG; mock call count unchanged at 49 = ⌈2402 cues / 50⌉ batches) |
+| AI endpoint quota exhausted | Mock answering 429 → the translated fetch answers **HTTP 429**; native entries unaffected |
+| Native ar + fallback policy | No variant appended (fallback means "only when no native entry") — verified on Inception, which has native Arabic subs |
+
+**What awaits a real key:** every AI-side behavior above was verified against a local mock speaking the OpenAI `chat/completions` protocol (wire-compatible; the add-on's requests and status handling are real HTTP). Pointing `AI_BASE_URL`/`AI_API_KEY` at a real endpoint unlocks live model-quality verification — the single missing input is an `AI_API_KEY` value in `.env`.
 
 `/healthz` reports both live providers `configured: true` while keys are present.
 
@@ -274,18 +313,21 @@ If you rotate credentials, just edit `.env` and restart — no other change need
 ```
 src/
   index.js                 entry point (env loading, listen, provider status)
-  server.js                HTTP listener: subtitles route + extras bridge, CORS, /healthz
-  addon.js                 addon assembly + default provider registration
+  server.js                HTTP listener: subtitles route + extras bridge, proxy routes, /configure, CORS, /healthz
+  addon.js                 addon assembly + default provider and translator registration
   manifest.js              manifest + manifest.config generation from the schema
-  handler.js               subtitles handler: merge, dedupe, order, cap, cache, fallback
+  handler.js               subtitles handler: merge, dedupe, order, cap, cache, AI trigger policy
   catalog.js               id parsing (tt/tmdb, season:episode) + extras normalisation
   languages.js             language table (Arabic first) + normalisation helpers
+  configure.js             self-hosted /configure page, generated from the schema
   config/                  schema (single source of truth) + layered resolution
-  providers/               registry + opensubtitles + subdl + demoFixtures
+  providers/               registry + opensubtitles + subdl + demoFixtures + contentProxy
+  translators/             translator registry + OpenAI-compatible driver + cache-by-hash service
+  util/                    zip, charset, ASS→SRT, cue-text extraction
   http/client.js           fetch wrapper: timeouts, JSON, typed errors
 test/                      node:test suite (npm test)
 fixtures/providers/        recorded payloads for the offline provider
-docs/superpowers/          design spec + implementation plan
+docs/superpowers/          design spec, implementation plan, measured performance record
 ```
 
 ## License

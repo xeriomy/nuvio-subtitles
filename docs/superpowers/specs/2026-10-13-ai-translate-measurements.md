@@ -32,7 +32,23 @@ Conclusion: there is no server-side listing fat to remove; residual latency is u
 
 **Fetch failures / quota.** Warm proxy fetches cost 0 upstream calls (measured above), so the player's constant re-fetching (preview/playback/auto-sync) burns exactly one download per distinct subtitle — the 406-quota mitigation from the previous iteration, re-verified with numbers. Cold fetch latency (560–920 ms) is upstream download-bound; status passthrough (429/406) is pinned by `test/contentProxy.test.js` and now also by the translator-driver tests.
 
-## After (this branch)
+## After (this branch) — recorded 2026-10-14
 
-- Listing paths: unchanged by design — translation runs only inside the content-proxy path, so the numbers above are the guarantee, not a hope (verified again after the features landed, below).
-- Translated fetch, before/after (the new fetching path; mock OpenAI-compatible endpoint, real SubDL source file): first fetch = one upstream download + one AI call; repeat fetch = **cache hit, 0 AI calls, 0 upstream calls** — see "Live verification" section in README for the recorded numbers.
+**Native listings are untouched by the translation feature (live, byte-level):** same process, seconds apart, `aiTranslate: off` vs translation active (key set) — byte-identical 20-entry listings for demo movie, demo series and the live-key movie. Two earlier designs were measured and rejected because they *changed native results*:
+
+1. mixing `en` into the primary search — the OpenSubtitles API re-ranks per query, so the Arabic top-20 changed;
+2. running the EN search in parallel with the primary — doubled same-key concurrency made a flaky provider return a short list, shifting native entries.
+
+The shipped design runs the EN search only when the policy needs a source, strictly after the native merge: ar-rich listings pay zero extra latency, ar-poor listings pay one bounded, isolated search that the translated variant inherently requires.
+
+**The new fetching path, before/after (the measured fix):** translation is cached by content hash.
+
+| Fetch of the same translated subtitle | before (no cache) | after (cache-by-hash) |
+|---|---|---|
+| First fetch | 1.45 s (source download + 49 model batches, 2402 cues) | 1.45 s |
+| Every repeat fetch (player re-fetches constantly) | seconds — a full model call each time | **7.1 ms, 0 model calls** |
+| Endpoint quota exhausted (429) | passed through | passes through; native entries unaffected |
+
+**Listing path after:** unchanged by design and verified — demo movie 150 ms, demo series 145 ms, live movie 140 ms (same profile as the baseline table above).
+
+**Instrumentation kept permanently:** `DEBUG=true` logs per-provider latency + hit counts + failure reasons, proxy fetch latency with cache provenance, total handler latency, and translation latency with cache hit/miss and cue counts — greppable as `[debug] provider …`, `[debug] proxy …`, `[debug] subtitles total …`, `[debug] translate …`.
