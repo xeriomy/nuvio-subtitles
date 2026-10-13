@@ -18,6 +18,7 @@ const { parseExtras } = require('./catalog');
 const { createOpenSubtitlesDownloader } = require('./providers/opensubtitlesDownload');
 const { createContentProxy } = require('./providers/contentProxy');
 const { createTranslationService } = require('./translators/service');
+const { renderConfigurePage } = require('./configure');
 
 // /[/config]/subtitles/{type}/{id}[/{extra}].json  — config is URL-encoded JSON
 const SUBTITLES_RE = /^\/(?:([^/]+)\/)?subtitles\/([^/]+)\/([^/]+?)(?:\/([^/]*))?\.json$/;
@@ -38,6 +39,7 @@ function createServer(opts = {}) {
 	const opensubtitlesDownloader = opts.opensubtitlesDownloader || createOpenSubtitlesDownloader();
 	const contentProxy = opts.contentProxy || createContentProxy({ fetchImpl: httpFetch });
 	const translation = opts.translationService || createTranslationService({ translators });
+	const configurePage = opts.configurePage || renderConfigurePage({ env: opts.env || {} });
 
 	return function addonRequestListener(req, res) {
 		// The addon protocol requires CORS on every route, including manifest.
@@ -62,6 +64,17 @@ function createServer(opts = {}) {
 		if (pathname === '/' ) {
 			res.writeHead(302, { Location: '/manifest.json' });
 			res.end();
+			return;
+		}
+
+		if (pathname === '/configure') {
+			if (req.method !== 'GET' && req.method !== 'HEAD') {
+				sendJson(res, 405, { err: 'method not allowed' });
+				return;
+			}
+			// prefilled from env config, so never cache it anywhere
+			res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+			res.end(configurePage);
 			return;
 		}
 
