@@ -150,6 +150,25 @@ test('results from different providers are interleaved round-robin so no provide
 	assert.deepEqual(res.entries.map(e => e.url), ['a1', 'b1', 'a2', 'b2', 'a3', 'b3']);
 });
 
+test('debug logging reports per-provider latency and failures without changing results', async () => {
+	const lines = [];
+	const orig = console.log;
+	console.log = (l) => lines.push(String(l));
+	try {
+		const reg = new ProviderRegistry();
+		reg.register(makeProvider({ meta: { id: 'ok', order: 10 }, hits: [{ url: 'u', lang: 'ar' }] }));
+		reg.register(makeProvider({ meta: { id: 'boom', order: 20 }, throws: 'HTTP 500' }));
+		const res = await reg.searchAll({ media: ctx.media, extras: ctx.extras, config: { debug: true } });
+		assert.deepEqual(res.entries.map(e => e.url), ['u']);
+		assert.equal(res.failures.length, 1);
+		assert.equal(res.failures[0].id, 'boom');
+	} finally {
+		console.log = orig;
+	}
+	assert.ok(lines.some(l => /^\[debug\] provider ok: \d+ms, 1 hits$/.test(l)), `missing ok timing line, got: ${JSON.stringify(lines)}`);
+	assert.ok(lines.some(l => /^\[debug\] provider boom failed: HTTP 500 \(\d+ms\)$/.test(l)), `missing failure timing line, got: ${JSON.stringify(lines)}`);
+});
+
 test('health() reports every registered provider', async () => {
 	const reg = new ProviderRegistry();
 	reg.register(makeProvider({ meta: { id: 'p1' } }));

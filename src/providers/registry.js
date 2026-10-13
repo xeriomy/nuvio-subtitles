@@ -95,7 +95,20 @@ class ProviderRegistry {
 
 		if (!providers.length) return { entries: [], failures: [] };
 
-		const settled = await Promise.allSettled(providers.map(p => withTimeout(p, ctx, timeoutMs)));
+		const debug = config.debug === true;
+		const t0 = Date.now();
+		const settled = await Promise.allSettled(providers.map(async (p) => {
+			const started = Date.now();
+			try {
+				const out = await withTimeout(p, ctx, timeoutMs);
+				if (debug) console.log(`[debug] provider ${p.meta.id}: ${Date.now() - started}ms, ${out.length} hits`);
+				return out;
+			} catch (err) {
+				if (debug) console.log(`[debug] provider ${p.meta.id} failed: ${errorReason(err)} (${Date.now() - started}ms)`);
+				throw err;
+			}
+		}));
+		if (debug) console.log(`[debug] providers total: ${Date.now() - t0}ms`);
 
 		const failures = [];
 		const perProvider = [];

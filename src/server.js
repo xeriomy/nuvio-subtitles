@@ -101,6 +101,8 @@ function serveSubtitles(match, url, req, { iface, resolveConfig }, res) {
 	resolved.addonBaseUrl = resolved.addonBaseUrl || requestBase(req);
 
 	if (resolved.debug) {
+		const t0 = Date.now();
+		res.on('finish', () => console.log(`[debug] subtitles total: ${Date.now() - t0}ms`));
 		console.log(`[debug] subtitles ${type}/${rawId} extras=${JSON.stringify(extras)} config=${JSON.stringify({
 			languages: resolved.languages,
 			verifyShowNames: resolved.verifyShowNames,
@@ -155,7 +157,7 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 			const link = await opensubtitlesDownloader(os[1], config);
 			if (!link) throw statusError('no download link available', 502);
 			return link;
-		}));
+		}), { label: `opensubtitles/${os[1]}`, debug: config.debug === true });
 		return true;
 	}
 
@@ -176,7 +178,8 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 			return true;
 		}
 		serveProxyContent(res, contentProxy.get('subdl', path, async () =>
-			`https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`));
+			`https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`),
+			{ label: `subdl/${path}`, debug: config.debug === true });
 		return true;
 	}
 
@@ -184,9 +187,11 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 }
 
 /** Stream the resolved content with caching headers; pass upstream 429s through. */
-function serveProxyContent(res, promise) {
+function serveProxyContent(res, promise, { label = '', debug = false } = {}) {
+	const t0 = Date.now();
 	promise
 		.then((content) => {
+			if (debug) console.log(`[debug] proxy ${label}: ${Date.now() - t0}ms${content.fromCache ? ' (cache)' : ''}`);
 			res.writeHead(200, {
 				'Content-Type': content.contentType,
 				'Content-Length': content.body.length,
