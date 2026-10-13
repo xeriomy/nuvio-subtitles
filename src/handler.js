@@ -33,14 +33,66 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 
 		const { entries } = await registry.searchAll({ media, config, extras }) || { entries: [] };
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
+		const envConfig = resolveConfig(undefined); // policy sees env-only config for the blob diff
 
 		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
 		const ordered = orderExactMatchesFirst(subtitles, extras).map(stripInternalFields);
+		const withAi = appendAiTranslatedEntries(ordered, config, envConfig);
 		const finalSubtitles = config.encodingFallback === true
-			? ordered.map(s => applyEncodingFallback(s))
-			: ordered;
+			? withAi.map(s => applyEncodingFallback(s))
+			: withAi;
 		return withCache({ subtitles: finalSubtitles }, config);
 	};
+}
+
+/**
+ * AI translation trigger policy. When the policy allows, exactly one variant
+ * is appended: the highest-ranked English entry whose file this add-on's proxy
+ * can fetch, pointing at `<source url>?ai=<blob>`. The listing never calls the
+ * translator — this only shapes URLs — so translation can never delay or fail
+ * native results. The cap grows by the variant count so no native entry is
+ * ever displaced.
+ */
+function appendAiTranslatedEntries(entries, config, envConfig) {
+	const policy = String(config.aiTranslate || 'fallback');
+	if (policy === 'off') return entries;
+	const target = (Array.isArray(config.languages) && config.languages[0]) || 'ar';
+	if (!target || target === 'en') return entries; // nothing to translate into
+	if (!config.aiApiKey && !envConfig.aiApiKey) return entries; // no translator configured anywhere
+	const hasNative = entries.some(e => e.lang === target);
+	if (hasNative && policy !== 'always') return entries;
+	const source = entries.find(e => e.lang === 'en' && isProxyUrl(e.url));
+	if (!source) return entries;
+
+	return entries.concat([{
+		id: `ai-${source.id}`,
+		url: `${source.url}?ai=${buildAiParam(target, config, envConfig)}`,
+		lang: target,
+		label: source.label ? `${source.label} (AI translated)` : '(AI translated)',
+	}]);
+}
+
+/** Only URLs this add-on's content proxy serves can be translated (fail-closed). */
+function isProxyUrl(url) {
+	try {
+		return /^\/proxy\/(opensubtitles|subdl)\//.test(new URL(String(url)).pathname);
+	} catch (e) {
+		return false;
+	}
+}
+
+/**
+ * The `?ai=` blob: target language, plus translator settings ONLY when the
+ * request config differs from the server env (request wins at fetch time,
+ * matching the `/{config}/...` layering). Env-held keys never travel in URLs.
+ */
+function buildAiParam(target, config, envConfig) {
+	const param = { l: target };
+	const fields = [['aiApiKey', 'k'], ['aiModel', 'm'], ['aiBaseUrl', 'b']];
+	for (const [key, short] of fields) {
+		if (String(config[key] || '') !== String(envConfig[key] || '')) param[short] = String(config[key] || '');
+	}
+	return encodeURIComponent(JSON.stringify(param));
 }
 
 /** Dedupe by url+lang, order by language preference, cap the total. */
@@ -155,4 +207,4 @@ function positiveInt(value, fallback) {
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
-module.exports = { createSubtitlesHandler, mergeEntries, langRank, applyEncodingFallback, orderExactMatchesFirst, stripInternalFields };
+module.exports = { createSubtitlesHandler, mergeEntries, langRank, applyEncodingFallback, orderExactMatchesFirst, stripInternalFields, appendAiTranslatedEntries };
