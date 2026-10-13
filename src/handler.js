@@ -33,25 +33,25 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 
 		const envConfig = resolveConfig(undefined); // env-only config: translation gate + blob diff
 		const translationActive = config.aiTranslate !== 'off' && Boolean(config.aiApiKey || envConfig.aiApiKey);
-		// The primary search must stay byte-identical to a translation-less
-		// deployment (measured: mixing 'en' into one search changes which
-		// native results the providers return). English sources for AI
-		// translation come from a separate speculative search, in parallel,
-		// sharing the same timeout budget — and are discarded when unneeded.
-		const [primary, enSearch] = await Promise.all([
-			registry.searchAll({ media, config, extras }),
-			translationActive
-				? registry.searchAll({ media, config: { ...config, languages: ['en'] }, extras })
-				: Promise.resolve({ entries: [], failures: [] }),
-		]);
+		const { entries } = await registry.searchAll({ media, config, extras }) || { entries: [] };
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
 
-		const subtitles = mergeEntries(primary && primary.entries, languages, positiveInt(config.maxSubtitles, 20));
+		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
 		const ordered = orderExactMatchesFirst(subtitles, extras).map(stripInternalFields);
-		const enSources = orderExactMatchesFirst(
-			mergeEntries(enSearch && enSearch.entries, ['en'], positiveInt(config.maxSubtitles, 20)),
-			extras,
-		);
+
+		// The EN search runs ONLY when the policy actually needs a source —
+		// never concurrently with the primary search (measured: doubled
+		// concurrency makes flaky providers return short lists, which
+		// perturbs native results). Ar-rich listings therefore pay nothing
+		// extra and stay byte-identical to a translation-less deployment.
+		const hasNative = ordered.some(e => e.lang === languages[0]);
+		const needsEnSearch = translationActive && (config.aiTranslate === 'always' || !hasNative);
+		const enSources = needsEnSearch
+			? orderExactMatchesFirst(
+				mergeEntries((await registry.searchAll({ media, config: { ...config, languages: ['en'] }, extras }) || { entries: [] }).entries,
+					['en'], positiveInt(config.maxSubtitles, 20)),
+				extras)
+			: [];
 		const withAi = appendAiTranslatedEntries(ordered, enSources, config, envConfig);
 		const finalSubtitles = config.encodingFallback === true
 			? withAi.map(s => applyEncodingFallback(s))

@@ -305,12 +305,21 @@ test('request-configured translator fields travel in the blob only when they dif
 	assert.deepEqual(JSON.parse(decodeURIComponent(same[0].url.split('?ai=')[1])), { l: 'ar' });
 });
 
-test('end to end: the handler runs the native search unchanged and a separate EN search when translation is active', async () => {
+test('end to end: the native search runs alone when no variant is needed (fallback + native present)', async () => {
+	const seen = [];
+	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [{ id: 'n', url: 'http://addon.test/proxy/opensubtitles/5', lang: 'ar' }], failures: [] }; } };
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => aiConfig() });
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.deepEqual(seen, [['ar']], 'a native-ar listing must not trigger any EN search');
+	assert.equal(res.subtitles.some(s => s.id.startsWith('ai-')), false);
+});
+
+test('end to end: fallback without a native entry runs the EN search second, with exactly languages=[en]', async () => {
 	const seen = [];
 	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
 	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => aiConfig() });
 	await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	assert.deepEqual(seen, [['ar'], ['en']], 'primary search keeps the user preference untouched; EN is a separate search');
+	assert.deepEqual(seen, [['ar'], ['en']]);
 });
 
 test('end to end: with translation off or unconfigured there is exactly one search', async () => {
