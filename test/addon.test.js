@@ -25,11 +25,24 @@ test('the manifest declares Arabic as the configurable default language', () => 
 });
 
 test('the manifest never embeds credentials, even when the environment has them', () => {
-	const env = { OPENSUBTITLES_API_KEY: 'super-secret-value', SUBDL_API_KEY: 'another-secret' };
+	const env = { OPENSUBTITLES_API_KEY: 'super-secret-value', SUBDL_API_KEY: 'another-secret', AI_API_KEY: 'ai-secret-value' };
 	const { manifest } = buildAddon({ env });
 	const serialized = JSON.stringify(manifest);
 	assert.equal(serialized.includes('super-secret-value'), false);
 	assert.equal(serialized.includes('another-secret'), false);
+	assert.equal(serialized.includes('ai-secret-value'), false);
+});
+
+test('the secrets invariant is scoped to manifest defaults: every secret schema key advertises an empty default', () => {
+	const { CONFIG_SCHEMA } = require('../src/config/schema');
+	const { buildManifest } = require('../src/manifest');
+	const manifest = buildManifest({ env: { OPENSUBTITLES_API_KEY: 'x', SUBDL_API_KEY: 'y', AI_API_KEY: 'z' } });
+	const defaults = Object.fromEntries(manifest.config.map(c => [c.key, c.default]));
+	const secretKeys = CONFIG_SCHEMA.filter(e => e.secret).map(e => e.key);
+	assert.ok(secretKeys.includes('opensubtitlesApiKey') && secretKeys.includes('subdlApiKey') && secretKeys.includes('aiApiKey'));
+	for (const key of secretKeys) {
+		assert.equal(defaults[key], '', `manifest default for ${key} must stay empty`);
+	}
 });
 
 test('the default registry has OpenSubtitles, SubDL and the fixtures provider', () => {

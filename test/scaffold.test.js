@@ -21,7 +21,7 @@ test('.env is gitignored', () => {
 test('.env.example contains no secret values', () => {
 	const example = readFileSync(join(ROOT, '.env.example'), 'utf8');
 	// Every credential-ish key must be declared with an EMPTY value.
-	const credentialKeys = /^(OPENSUBTITLES_API_KEY|SUBDL_API_KEY|CONFIG_JSON)\s*=\s*(.*)$/;
+	const credentialKeys = /^(OPENSUBTITLES_API_KEY|SUBDL_API_KEY|AI_API_KEY|CONFIG_JSON)\s*=\s*(.*)$/;
 	const offenders = example
 		.split('\n')
 		.map((line, i) => ({ line: line.trim(), i }))
