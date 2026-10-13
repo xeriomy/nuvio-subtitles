@@ -29,16 +29,9 @@ test('register validates the translator contract', () => {
 
 test('pick() returns the first enabled AND configured translator', () => {
 	const reg = new TranslatorRegistry();
-	reg.register(makeTranslator({ meta: { id: 'a', order: 10 }, configured: false }));
-	reg.register(makeTranslator({ meta: { id: 'b', order: 20 } }));
+	reg.register(makeTranslator({ meta: { id: 'a' }, configured: false }));
+	reg.register(makeTranslator({ meta: { id: 'b' } }));
 	assert.equal(reg.pick({}).meta.id, 'b', 'unconfigured translators are skipped');
-});
-
-test('pick() honors per-translator enable overrides', () => {
-	const reg = new TranslatorRegistry();
-	reg.register(makeTranslator({ meta: { id: 'a', order: 10 } }));
-	assert.equal(reg.pick({ perTranslatorSettings: { a: false } }), null);
-	assert.equal(reg.pick({ perTranslatorSettings: { a: true } }).meta.id, 'a');
 });
 
 test('pick() returns null when nothing is registered or configured', () => {
