@@ -87,3 +87,42 @@ test('debug mode defaults off and parses from the environment', () => {
 	assert.equal(resolveConfig({}, {}).debug, false);
 	assert.equal(resolveConfig({ DEBUG: '1' }, {}).debug, true);
 });
+
+test('AI translation keys resolve to their defaults (policy fallback, Arabic target via languages)', () => {
+	const cfg = resolveConfig({}, {});
+	assert.equal(cfg.aiTranslate, 'fallback');
+	assert.equal(cfg.aiApiKey, '');
+	assert.equal(cfg.aiBaseUrl, 'https://api.openai.com/v1');
+	assert.equal(cfg.aiModel, 'gpt-4o-mini');
+});
+
+test('AI translation keys parse from environment and request config, request winning', () => {
+	const envCfg = resolveConfig({ AI_TRANSLATE: 'always', AI_API_KEY: 'k-env', AI_BASE_URL: 'http://x/v1', AI_MODEL: 'm-env' }, {});
+	assert.equal(envCfg.aiTranslate, 'always');
+	assert.equal(envCfg.aiApiKey, 'k-env');
+	assert.equal(envCfg.aiBaseUrl, 'http://x/v1');
+	assert.equal(envCfg.aiModel, 'm-env');
+	const reqCfg = resolveConfig({ AI_MODEL: 'm-env' }, { aiTranslate: 'off', aiApiKey: 'k-req', aiModel: 'm-req' });
+	assert.equal(reqCfg.aiTranslate, 'off');
+	assert.equal(reqCfg.aiApiKey, 'k-req');
+	assert.equal(reqCfg.aiModel, 'm-req');
+});
+
+test('an invalid aiTranslate policy normalizes to the default, never a silent no-op', () => {
+	assert.equal(resolveConfig({ AI_TRANSLATE: 'bogus' }, {}).aiTranslate, 'fallback');
+	assert.equal(resolveConfig({}, { aiTranslate: '' }).aiTranslate, 'fallback');
+	assert.equal(resolveConfig({}, { aiTranslate: 'ALWAYS' }).aiTranslate, 'always');
+});
+
+test('languages select is untouched by select normalization', () => {
+	assert.deepEqual(resolveConfig({ LANGUAGES: 'en,ar' }, {}).languages, ['en', 'ar']);
+});
+
+test('the manifest declares the AI keys with options, and never carries a secret even when env has one', () => {
+	const manifest = buildManifest({ env: { AI_API_KEY: 'leaky', AI_TRANSLATE: 'always' } });
+	const decl = Object.fromEntries((manifest.config || []).map(o => [o.key, o]));
+	assert.equal(decl.aiTranslate.default, 'fallback', 'manifest defaults come from the schema, not env');
+	assert.deepEqual(decl.aiTranslate.options, ['fallback', 'always', 'off']);
+	assert.equal(decl.aiApiKey.default, '');
+	assert.ok(decl.aiApiKey, 'aiApiKey must be declared in manifest.config');
+});

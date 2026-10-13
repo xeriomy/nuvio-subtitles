@@ -54,6 +54,15 @@ function resolveConfig(env = {}, userConfig = {}) {
 	cfg.providerOrder = normalizeList(cfg.providerOrder);
 	cfg.perProviderSettings = normalizeObject(cfg.perProviderSettings);
 
+	// select keys with declared options: case-normalize, and reject unknown
+	// values back to the schema default (a typo must not disable the feature).
+	for (const entry of CONFIG_SCHEMA) {
+		if (entry.type === 'select' && Array.isArray(entry.options)) {
+			const value = String(cfg[entry.key] ?? '').trim().toLowerCase();
+			cfg[entry.key] = entry.options.includes(value) ? value : entry.default;
+		}
+	}
+
 	return cfg;
 }
 

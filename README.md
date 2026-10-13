@@ -77,6 +77,10 @@ Precedence, highest first:
 | `subdlEnabled` | `SUBDL_ENABLED` | checkbox | `true` | Enable the SubDL provider. |
 | `subdlApiKey` | `SUBDL_API_KEY` | text | *(empty)* | SubDL API key — **read from env only**. |
 | `demoFixturesEnabled` | `DEMOFIXTURES_ENABLED` | checkbox | `true` | Enable the bundled fixtures provider (works with no credentials and no network). |
+| `aiTranslate` | `AI_TRANSLATE` | select | `fallback` | AI translation of English subtitles into the preferred language (first entry of the language setting). `fallback` = only when no preferred-language subtitle was found natively; `always` = add an AI-translated entry even next to native ones; `off` = never. Runs at subtitle-*fetch* time (content proxy), never during listing — see [AI translation](#ai-translation-english--preferred-language). |
+| `aiApiKey` | `AI_API_KEY` | text | *(empty)* | API key for the OpenAI-compatible translation endpoint — **read from env only**; empty disables AI translation. |
+| `aiBaseUrl` | `AI_BASE_URL` | text | `https://api.openai.com/v1` | Base URL of the OpenAI-compatible endpoint (`POST {base}/chat/completions`) — OpenRouter, Ollama, LM Studio, etc. |
+| `aiModel` | `AI_MODEL` | text | `gpt-4o-mini` | Model name for the translation endpoint; must follow the JSON-array protocol (a capable instruct model). |
 | `providerOrder` | `PROVIDER_ORDER` | text | *(empty)* | Comma-separated provider ids controlling result order, e.g. `opensubtitles,subdl,demoFixtures`. |
 | `perProviderSettings` | `PER_PROVIDER_SETTINGS` | text | `{}` | JSON object of per-provider overrides, e.g. `{"subdl":false}`. |
 | `maxSubtitles` | `MAX_SUBTITLES` | number | `20` | Maximum subtitle entries returned per request. |
