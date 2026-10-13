@@ -17,6 +17,7 @@ const { buildAddon } = require('./addon');
 const { parseExtras } = require('./catalog');
 const { createOpenSubtitlesDownloader } = require('./providers/opensubtitlesDownload');
 const { createContentProxy } = require('./providers/contentProxy');
+const { createTranslationService } = require('./translators/service');
 
 // /[/config]/subtitles/{type}/{id}[/{extra}].json  — config is URL-encoded JSON
 const SUBTITLES_RE = /^\/(?:([^/]+)\/)?subtitles\/([^/]+)\/([^/]+?)(?:\/([^/]*))?\.json$/;
@@ -32,10 +33,11 @@ const SUBDL_PROXY_RE = /^\/proxy\/subdl\/([A-Za-z0-9][A-Za-z0-9/._-]*)$/;
  * @returns {(req: import('http').IncomingMessage, res: import('http').ServerResponse) => void}
  */
 function createServer(opts = {}) {
-	const { manifest, interface: iface, registry, resolveConfig } = buildAddon(opts);
+	const { manifest, interface: iface, registry, translators, resolveConfig } = buildAddon(opts);
 	const sdkRouter = getRouter({ manifest, get: iface.get });
 	const opensubtitlesDownloader = opts.opensubtitlesDownloader || createOpenSubtitlesDownloader();
 	const contentProxy = opts.contentProxy || createContentProxy({ fetchImpl: httpFetch });
+	const translation = opts.translationService || createTranslationService({ translators });
 
 	return function addonRequestListener(req, res) {
 		// The addon protocol requires CORS on every route, including manifest.
@@ -64,11 +66,15 @@ function createServer(opts = {}) {
 		}
 
 		if (pathname === '/healthz') {
-			sendJson(res, 200, { ok: true, providers: healthView(registry, resolveConfig) });
+			sendJson(res, 200, {
+				ok: true,
+				providers: healthView(registry, resolveConfig),
+				translators: translatorsView(translators, resolveConfig(undefined)),
+			});
 			return;
 		}
 
-		if (serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy })) return;
+		if (serveProxy(pathname, url, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy, translation })) return;
 
 		const match = SUBTITLES_RE.exec(pathname);
 		if (match) {
@@ -137,13 +143,28 @@ function requestBase(req) {
  * (preview, playback, auto-sync), so redirecting it to the provider produced
  * HTTP 429 rate limits and quota exhaustion.
  */
-function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy }) {
+function serveProxy(pathname, url, req, res, { resolveConfig, opensubtitlesDownloader, contentProxy, translation }) {
 	const os = OS_PROXY_RE.exec(pathname);
+	const subdl = SUBDL_PROXY_RE.exec(pathname);
+	if (!os && !subdl) return false;
+
+	// AI translation variant: ?ai=<json> on a proxy URL (appended by the
+	// listing when the trigger policy allows). Parsed and validated before
+	// any fetch so a bad parameter costs nothing.
+	let ai = null;
+	try {
+		ai = parseAiParam(url);
+	} catch (err) {
+		sendJson(res, 400, { err: err.message });
+		return true;
+	}
+
+	if (req.method !== 'GET' && req.method !== 'HEAD') {
+		sendJson(res, 405, { err: 'method not allowed' });
+		return true;
+	}
+
 	if (os) {
-		if (req.method !== 'GET' && req.method !== 'HEAD') {
-			sendJson(res, 405, { err: 'method not allowed' });
-			return true;
-		}
 		if (!/^\d+$/.test(os[1])) {
 			sendJson(res, 400, { err: 'file id must be numeric' });
 			return true;
@@ -153,37 +174,68 @@ function serveProxy(pathname, req, res, { resolveConfig, opensubtitlesDownloader
 			sendJson(res, 503, { err: 'OpenSubtitles is not configured' });
 			return true;
 		}
-		serveProxyContent(res, contentProxy.get('opensubtitles', os[1], async () => {
+		serveProxyContent(res, translated(contentProxy.get('opensubtitles', os[1], async () => {
 			const link = await opensubtitlesDownloader(os[1], config);
 			if (!link) throw statusError('no download link available', 502);
 			return link;
-		}), { label: `opensubtitles/${os[1]}`, debug: config.debug === true });
+		}), ai, config, translation, config.debug === true), { label: `opensubtitles/${os[1]}`, debug: config.debug === true });
 		return true;
 	}
 
-	const subdl = SUBDL_PROXY_RE.exec(pathname);
-	if (subdl) {
-		if (req.method !== 'GET' && req.method !== 'HEAD') {
-			sendJson(res, 405, { err: 'method not allowed' });
-			return true;
-		}
-		const path = subdl[1];
-		if (path.includes('..') || path.includes('//')) {
-			sendJson(res, 400, { err: 'bad path' });
-			return true;
-		}
-		const config = resolveConfig(undefined);
-		if (!config.subdlApiKey) {
-			sendJson(res, 503, { err: 'SubDL is not configured' });
-			return true;
-		}
-		serveProxyContent(res, contentProxy.get('subdl', path, async () =>
-			`https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`),
-			{ label: `subdl/${path}`, debug: config.debug === true });
+	const path = subdl[1];
+	if (path.includes('..') || path.includes('//')) {
+		sendJson(res, 400, { err: 'bad path' });
 		return true;
 	}
+	const config = resolveConfig(undefined);
+	if (!config.subdlApiKey) {
+		sendJson(res, 503, { err: 'SubDL is not configured' });
+		return true;
+	}
+	serveProxyContent(res, translated(contentProxy.get('subdl', path, async () =>
+		`https://dl.subdl.com/${path}?api_key=${encodeURIComponent(config.subdlApiKey)}`),
+		ai, config, translation, config.debug === true), { label: `subdl/${path}`, debug: config.debug === true });
+	return true;
+}
 
-	return false;
+/**
+ * Apply the AI translation step to a proxy content promise when a `?ai=`
+ * variant was requested. Without the parameter this is the identity —
+ * the plain proxy path behaves exactly as before.
+ */
+function translated(promise, ai, config, translation, debug) {
+	if (!ai) return promise;
+	return promise.then((content) => translation.translate(content, {
+		targetLang: ai.lang,
+		config: Object.assign({}, config, ai.overlay),
+		debug,
+	}));
+}
+
+/**
+ * `?ai=` carries a JSON object the subtitles handler built: `{ l, k?, m?, b? }`.
+ * `l` is the target language; `k/m/b` carry request-configured translator
+ * settings (key/model/base URL) ONLY for values the user configured per-client
+ * that the server env does not already provide — request config wins, the
+ * same layering as the `/{config}/...` path form.
+ */
+function parseAiParam(url) {
+	const raw = url ? url.searchParams.get('ai') : null;
+	if (raw === null) return null;
+	let parsed;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (e) {
+		throw statusError('bad ai parameter', 400);
+	}
+	if (!parsed || typeof parsed !== 'object' || !/^[a-z]{2,3}$/.test(String(parsed.l || ''))) {
+		throw statusError('bad ai parameter', 400);
+	}
+	const overlay = {};
+	if (parsed.k) overlay.aiApiKey = String(parsed.k);
+	if (parsed.m) overlay.aiModel = String(parsed.m);
+	if (parsed.b) overlay.aiBaseUrl = String(parsed.b);
+	return { lang: parsed.l, overlay };
 }
 
 /** Stream the resolved content with caching headers; pass upstream 429s through. */
@@ -237,6 +289,25 @@ function healthView(registry, resolveConfig) {
 		configured: p.configured,
 		supportsVideoHash: p.meta ? p.meta.supportsVideoHash === true : false,
 	}));
+}
+
+function translatorsView(translators, config) {
+	return (translators ? translators.list() : []).map(meta => {
+		const translator = translators.get(meta.id);
+		return {
+			id: meta.id,
+			name: meta.name,
+			configured: safeConfigured(translator, config),
+		};
+	});
+}
+
+function safeConfigured(translator, config) {
+	try {
+		return translator.isConfigured(config) !== false;
+	} catch (e) {
+		return false;
+	}
 }
 
 function sendJson(res, status, payload) {

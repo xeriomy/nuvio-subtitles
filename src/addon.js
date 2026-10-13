@@ -6,6 +6,8 @@ const { ProviderRegistry } = require('./providers/registry');
 const { createOpenSubtitlesProvider } = require('./providers/opensubtitles');
 const { createSubdlProvider } = require('./providers/subdl');
 const { createDemoFixturesProvider } = require('./providers/demoFixtures');
+const { TranslatorRegistry } = require('./translators/registry');
+const { createOpenAiTranslator } = require('./translators/openai');
 
 /**
  * Build the whole add-on: registry, manifest and subtitles handler.
@@ -30,12 +32,21 @@ function buildAddon(opts = {}) {
 		registerDefaultProviders(registry);
 	}
 
+	const translators = new TranslatorRegistry();
+	if (opts.translators && typeof opts.translators.pick === 'function') {
+		for (const meta of opts.translators.list()) translators.register(opts.translators.get(meta.id));
+	} else if (Array.isArray(opts.translators)) {
+		opts.translators.forEach(t => translators.register(t));
+	} else {
+		registerDefaultTranslators(translators);
+	}
+
 	const resolve = (userConfig) => resolveConfig(env, userConfig);
 	builder.defineSubtitlesHandler(createSubtitlesHandler({ registry, resolveConfig: resolve }));
 
 	const iface = builder.getInterface();
 
-	return { manifest, interface: iface, registry, resolveConfig: resolve };
+	return { manifest, interface: iface, registry, translators, resolveConfig: resolve };
 }
 
 /** The providers shipped with the add-on. Add yours to this list. */
@@ -51,6 +62,12 @@ function registerDefaultProviders(registry) {
 	registry.register(subdl);
 	registry.register(demofixtures);
 
+	return registry;
+}
+
+/** The translators shipped with the add-on. Add yours to this list. */
+function registerDefaultTranslators(registry) {
+	registry.register(createOpenAiTranslator());
 	return registry;
 }
 
