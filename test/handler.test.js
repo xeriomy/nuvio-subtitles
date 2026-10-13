@@ -317,3 +317,32 @@ test('end to end: the handler appends the variant under fallback policy when onl
 	assert.equal(res.subtitles.length, 2);
 	assert.equal(res.subtitles[1].lang, 'ar');
 });
+
+test('with translation enabled, English joins the provider search languages (the fallback trigger needs EN sources)', async () => {
+	const seen = [];
+	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
+	const cfg = { ...aiConfig(), languages: ['ar'] };
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => cfg });
+	await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.deepEqual(seen[0], ['ar', 'en'], 'EN must be searched when a translator is configured');
+});
+
+test('with translation off or unconfigured, the search languages are exactly the user preference', async () => {
+	const seen = [];
+	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
+	const off = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ ...aiConfig({ aiTranslate: 'off' }) }) });
+	await off({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	const noKey = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ ...aiConfig({ aiApiKey: '' }) }) });
+	await noKey({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.deepEqual(seen[0], ['ar']);
+	assert.deepEqual(seen[1], ['ar']);
+});
+
+test('an explicit en preference is not duplicated in the search languages', async () => {
+	const seen = [];
+	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
+	const cfg = { ...aiConfig(), languages: ['en', 'ar'] };
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => cfg });
+	await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.deepEqual(seen[0], ['en', 'ar']);
+});

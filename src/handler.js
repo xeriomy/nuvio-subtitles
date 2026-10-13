@@ -31,9 +31,9 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 			type: args.type,
 		};
 
-		const { entries } = await registry.searchAll({ media, config, extras }) || { entries: [] };
+		const envConfig = resolveConfig(undefined); // env-only config: search-language gate + blob diff
+		const { entries } = await registry.searchAll({ media, config: withSearchLanguages(config, envConfig), extras }) || { entries: [] };
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
-		const envConfig = resolveConfig(undefined); // policy sees env-only config for the blob diff
 
 		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
 		const ordered = orderExactMatchesFirst(subtitles, extras).map(stripInternalFields);
@@ -79,6 +79,20 @@ function isProxyUrl(url) {
 	} catch (e) {
 		return false;
 	}
+}
+
+/**
+ * When AI translation is enabled and usable, the providers must also return
+ * English results — otherwise the fallback trigger would never see a source
+ * to translate. Preferred-language entries still outrank (and out-cap) English
+ * ones, so rich native listings are unchanged; poor ones gain EN tail entries.
+ */
+function withSearchLanguages(config, envConfig) {
+	const languages = Array.isArray(config.languages) ? config.languages : [];
+	if (config.aiTranslate === 'off') return config;
+	if (!config.aiApiKey && !envConfig.aiApiKey) return config;
+	if (languages.includes('en')) return config;
+	return { ...config, languages: languages.concat(['en']) };
 }
 
 /**
