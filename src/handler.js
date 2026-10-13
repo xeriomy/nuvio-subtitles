@@ -31,13 +31,28 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 			type: args.type,
 		};
 
-		const envConfig = resolveConfig(undefined); // env-only config: search-language gate + blob diff
-		const { entries } = await registry.searchAll({ media, config: withSearchLanguages(config, envConfig), extras }) || { entries: [] };
+		const envConfig = resolveConfig(undefined); // env-only config: translation gate + blob diff
+		const translationActive = config.aiTranslate !== 'off' && Boolean(config.aiApiKey || envConfig.aiApiKey);
+		// The primary search must stay byte-identical to a translation-less
+		// deployment (measured: mixing 'en' into one search changes which
+		// native results the providers return). English sources for AI
+		// translation come from a separate speculative search, in parallel,
+		// sharing the same timeout budget — and are discarded when unneeded.
+		const [primary, enSearch] = await Promise.all([
+			registry.searchAll({ media, config, extras }),
+			translationActive
+				? registry.searchAll({ media, config: { ...config, languages: ['en'] }, extras })
+				: Promise.resolve({ entries: [], failures: [] }),
+		]);
 		const languages = (config.languages && config.languages.length) ? config.languages : ['ar'];
 
-		const subtitles = mergeEntries(entries, languages, positiveInt(config.maxSubtitles, 20));
+		const subtitles = mergeEntries(primary && primary.entries, languages, positiveInt(config.maxSubtitles, 20));
 		const ordered = orderExactMatchesFirst(subtitles, extras).map(stripInternalFields);
-		const withAi = appendAiTranslatedEntries(ordered, config, envConfig);
+		const enSources = orderExactMatchesFirst(
+			mergeEntries(enSearch && enSearch.entries, ['en'], positiveInt(config.maxSubtitles, 20)),
+			extras,
+		);
+		const withAi = appendAiTranslatedEntries(ordered, enSources, config, envConfig);
 		const finalSubtitles = config.encodingFallback === true
 			? withAi.map(s => applyEncodingFallback(s))
 			: withAi;
@@ -47,13 +62,16 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
 
 /**
  * AI translation trigger policy. When the policy allows, exactly one variant
- * is appended: the highest-ranked English entry whose file this add-on's proxy
- * can fetch, pointing at `<source url>?ai=<blob>`. The listing never calls the
- * translator — this only shapes URLs — so translation can never delay or fail
- * native results. The cap grows by the variant count so no native entry is
- * ever displaced.
+ * is appended: the best English entry from the dedicated EN search whose file
+ * this add-on's proxy can fetch, pointing at `<source url>?ai=<blob>`. The
+ * listing never calls the translator — this only shapes URLs — so translation
+ * can never delay or fail native results. The cap grows by the variant count
+ * so no native entry is ever displaced.
+ *
+ * @param {Array} entries native listing (already merged, ordered, stripped)
+ * @param {Array} enSources English entries from the dedicated EN search (ordered)
  */
-function appendAiTranslatedEntries(entries, config, envConfig) {
+function appendAiTranslatedEntries(entries, enSources, config, envConfig) {
 	const policy = String(config.aiTranslate || 'fallback');
 	if (policy === 'off') return entries;
 	const target = (Array.isArray(config.languages) && config.languages[0]) || 'ar';
@@ -61,7 +79,7 @@ function appendAiTranslatedEntries(entries, config, envConfig) {
 	if (!config.aiApiKey && !envConfig.aiApiKey) return entries; // no translator configured anywhere
 	const hasNative = entries.some(e => e.lang === target);
 	if (hasNative && policy !== 'always') return entries;
-	const source = entries.find(e => e.lang === 'en' && isProxyUrl(e.url));
+	const source = (Array.isArray(enSources) ? enSources : []).find(e => e.lang === 'en' && isProxyUrl(e.url));
 	if (!source) return entries;
 
 	return entries.concat([{
@@ -79,20 +97,6 @@ function isProxyUrl(url) {
 	} catch (e) {
 		return false;
 	}
-}
-
-/**
- * When AI translation is enabled and usable, the providers must also return
- * English results — otherwise the fallback trigger would never see a source
- * to translate. Preferred-language entries still outrank (and out-cap) English
- * ones, so rich native listings are unchanged; poor ones gain EN tail entries.
- */
-function withSearchLanguages(config, envConfig) {
-	const languages = Array.isArray(config.languages) ? config.languages : [];
-	if (config.aiTranslate === 'off') return config;
-	if (!config.aiApiKey && !envConfig.aiApiKey) return config;
-	if (languages.includes('en')) return config;
-	return { ...config, languages: languages.concat(['en']) };
 }
 
 /**

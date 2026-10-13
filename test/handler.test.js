@@ -256,38 +256,39 @@ function aiConfig(overrides = {}) {
 }
 
 test('fallback policy: with no native Arabic entry, the best English proxy entry gains an AI variant', () => {
-	const out = appendAiTranslatedEntries([EN_PROXY], aiConfig(), aiConfig());
-	assert.equal(out.length, 2);
-	const variant = out[1];
+	const out = appendAiTranslatedEntries([], [EN_PROXY], aiConfig(), aiConfig());
+	assert.equal(out.length, 1);
+	const variant = out[0];
 	assert.equal(variant.lang, 'ar');
 	assert.equal(variant.url, `${EN_PROXY.url}?ai=${encodeURIComponent(JSON.stringify({ l: 'ar' }))}`);
 	assert.match(variant.label, /\(AI translated\)/);
 	assert.match(variant.label, /release/);
 });
 
-test('fallback policy: a native preferred-language entry means no variant', () => {
-	const out = appendAiTranslatedEntries([EN_PROXY, AR_NATIVE], aiConfig(), aiConfig());
+test('fallback policy: a native preferred-language entry means no variant (and the EN search was wasted, by design)', () => {
+	const out = appendAiTranslatedEntries([EN_PROXY, AR_NATIVE], [EN_PROXY], aiConfig(), aiConfig());
 	assert.equal(out.length, 2, 'the two natives only');
 	assert.deepEqual(out.filter(s => s.lang === 'ar').map(s => s.id), ['os-2']);
 });
 
 test('always policy: the variant is added even next to native entries', () => {
-	const out = appendAiTranslatedEntries([EN_PROXY, AR_NATIVE], aiConfig({ aiTranslate: 'always' }), aiConfig());
+	const out = appendAiTranslatedEntries([EN_PROXY, AR_NATIVE], [EN_PROXY], aiConfig({ aiTranslate: 'always' }), aiConfig());
 	assert.equal(out.filter(s => s.lang === 'ar').length, 2);
 });
 
 test('off policy, English target, non-proxy source, and no key anywhere each add nothing', () => {
-	assert.equal(appendAiTranslatedEntries([EN_PROXY], aiConfig({ aiTranslate: 'off' }), aiConfig()).length, 1);
-	assert.equal(appendAiTranslatedEntries([EN_PROXY], aiConfig({ languages: ['en'] }), aiConfig()).length, 1);
+	assert.equal(appendAiTranslatedEntries([EN_PROXY], [EN_PROXY], aiConfig({ aiTranslate: 'off' }), aiConfig()).length, 1);
+	assert.equal(appendAiTranslatedEntries([EN_PROXY], [EN_PROXY], aiConfig({ languages: ['en'] }), aiConfig()).length, 1);
 	const nonProxy = { id: 'x', url: 'https://dl.example.com/sub.srt', lang: 'en' };
-	assert.equal(appendAiTranslatedEntries([nonProxy], aiConfig(), aiConfig()).length, 1);
+	assert.equal(appendAiTranslatedEntries([], [nonProxy], aiConfig(), aiConfig()).length, 0);
 	const noKey = aiConfig({ aiApiKey: '' });
-	assert.equal(appendAiTranslatedEntries([EN_PROXY], noKey, { ...noKey, aiApiKey: '' }).length, 1);
+	assert.equal(appendAiTranslatedEntries([], [EN_PROXY], noKey, { ...noKey, aiApiKey: '' }).length, 0);
+	assert.equal(appendAiTranslatedEntries([], [], aiConfig(), aiConfig()).length, 0, 'no EN source, no variant');
 });
 
 test('the variant never displaces native entries (cap is maxSubtitles + 1)', () => {
 	const natives = Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, url: `http://addon.test/proxy/opensubtitles/${i}`, lang: i < 15 ? 'en' : 'fr' }));
-	const out = appendAiTranslatedEntries(natives, aiConfig(), aiConfig());
+	const out = appendAiTranslatedEntries(natives, [EN_PROXY], aiConfig(), aiConfig());
 	assert.equal(out.length, 21);
 	assert.equal(out.filter(s => s.lang !== 'ar').length, 20, 'all natives kept');
 });
@@ -296,53 +297,40 @@ test('request-configured translator fields travel in the blob only when they dif
 	const env = aiConfig({ aiApiKey: 'envkey', aiModel: 'envmodel', aiBaseUrl: 'https://env.test/v1' });
 	// request differs -> carried
 	const req = aiConfig({ aiApiKey: 'urlkey', aiModel: 'urlmodel', aiBaseUrl: 'https://env.test/v1' });
-	const out = appendAiTranslatedEntries([EN_PROXY], req, env);
-	const carried = JSON.parse(decodeURIComponent(out[1].url.split('?ai=')[1]));
+	const out = appendAiTranslatedEntries([], [EN_PROXY], req, env);
+	const carried = JSON.parse(decodeURIComponent(out[0].url.split('?ai=')[1]));
 	assert.deepEqual(carried, { l: 'ar', k: 'urlkey', m: 'urlmodel' }, 'b omitted: same as env');
 	// request equals env -> nothing carried
-	const same = appendAiTranslatedEntries([EN_PROXY], env, env);
-	assert.deepEqual(JSON.parse(decodeURIComponent(same[1].url.split('?ai=')[1])), { l: 'ar' });
+	const same = appendAiTranslatedEntries([], [EN_PROXY], env, env);
+	assert.deepEqual(JSON.parse(decodeURIComponent(same[0].url.split('?ai=')[1])), { l: 'ar' });
 });
 
-test('the variant is built from the exact-match-ranked English entry, not an arbitrary one', () => {
-	const ranked = { id: 'os-top', url: 'http://addon.test/proxy/opensubtitles/999', lang: 'en', label: 'top release' };
-	const out = appendAiTranslatedEntries([ranked, EN_PROXY], aiConfig(), aiConfig());
-	assert.match(out[2].url, /opensubtitles\/999\?ai=/);
-});
-
-test('end to end: the handler appends the variant under fallback policy when only English exists', async () => {
-	const p = makeProvider('p1', [{ url: 'http://addon.test/proxy/opensubtitles/111', lang: 'en' }]);
-	const handler = setup([p], aiConfig());
-	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	assert.equal(res.subtitles.length, 2);
-	assert.equal(res.subtitles[1].lang, 'ar');
-});
-
-test('with translation enabled, English joins the provider search languages (the fallback trigger needs EN sources)', async () => {
+test('end to end: the handler runs the native search unchanged and a separate EN search when translation is active', async () => {
 	const seen = [];
 	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
-	const cfg = { ...aiConfig(), languages: ['ar'] };
-	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => cfg });
+	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => aiConfig() });
 	await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	assert.deepEqual(seen[0], ['ar', 'en'], 'EN must be searched when a translator is configured');
+	assert.deepEqual(seen, [['ar'], ['en']], 'primary search keeps the user preference untouched; EN is a separate search');
 });
 
-test('with translation off or unconfigured, the search languages are exactly the user preference', async () => {
+test('end to end: with translation off or unconfigured there is exactly one search', async () => {
 	const seen = [];
 	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
-	const off = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ ...aiConfig({ aiTranslate: 'off' }) }) });
+	const off = createSubtitlesHandler({ registry: reg, resolveConfig: () => aiConfig({ aiTranslate: 'off' }) });
 	await off({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	const noKey = createSubtitlesHandler({ registry: reg, resolveConfig: () => ({ ...aiConfig({ aiApiKey: '' }) }) });
+	const noKey = createSubtitlesHandler({ registry: reg, resolveConfig: () => aiConfig({ aiApiKey: '' }) });
 	await noKey({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	assert.deepEqual(seen[0], ['ar']);
-	assert.deepEqual(seen[1], ['ar']);
+	assert.deepEqual(seen, [['ar'], ['ar']]);
 });
 
-test('an explicit en preference is not duplicated in the search languages', async () => {
-	const seen = [];
-	const reg = { searchAll: async (ctx) => { seen.push(ctx.config.languages); return { entries: [], failures: [] }; } };
-	const cfg = { ...aiConfig(), languages: ['en', 'ar'] };
-	const handler = createSubtitlesHandler({ registry: reg, resolveConfig: () => cfg });
-	await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
-	assert.deepEqual(seen[0], ['en', 'ar']);
+test('end to end: the variant is appended under fallback policy when only English exists natively', async () => {
+	const p = makeProvider('p1', [{ url: 'http://addon.test/proxy/opensubtitles/111', lang: 'en' }]);
+	const handler = createSubtitlesHandler({
+		registry: { searchAll: (ctx) => providerSearchAll(ctx.config.languages.includes('en') ? [p] : []) },
+		resolveConfig: () => aiConfig(),
+	});
+	const res = await handler({ type: 'movie', id: 'tt0111161', extra: {}, config: {} });
+	assert.equal(res.subtitles.length, 1, 'the EN-search variant, native search being empty in this stub');
+	assert.equal(res.subtitles[0].lang, 'ar');
+	assert.match(res.subtitles[0].url, /\?ai=/);
 });
