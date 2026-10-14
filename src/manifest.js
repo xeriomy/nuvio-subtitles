@@ -94,6 +94,7 @@ function titleFor(key) {
 		aiApiKey: 'AI translation API key (set via server env, not here)',
 		aiBaseUrl: 'AI translation base URL (OpenAI-compatible)',
 		aiModel: 'AI translation model',
+		aiMax: 'Max AI-translated entries per listing',
 		providerOrder: 'Provider order',
 		perProviderSettings: 'Per-provider settings (JSON)',
 		maxSubtitles: 'Max subtitles per request',

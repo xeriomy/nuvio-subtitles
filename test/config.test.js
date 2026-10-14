@@ -126,3 +126,9 @@ test('the manifest declares the AI keys with options, and never carries a secret
 	assert.equal(decl.aiApiKey.default, '');
 	assert.ok(decl.aiApiKey, 'aiApiKey must be declared in manifest.config');
 });
+
+test('aiMax defaults to 1 and parses from env, invalid values fall back to the default', () => {
+	assert.equal(resolveConfig({}, {}).aiMax, 1);
+	assert.equal(resolveConfig({ AI_MAX: '3' }, {}).aiMax, 3);
+	assert.equal(resolveConfig({ AI_MAX: 'lots' }, {}).aiMax, 1);
+});

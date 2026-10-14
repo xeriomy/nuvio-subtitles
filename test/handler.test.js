@@ -261,7 +261,7 @@ test('fallback policy: with no native Arabic entry, the best English proxy entry
 	const variant = out[0];
 	assert.equal(variant.lang, 'ar');
 	assert.equal(variant.url, `${EN_PROXY.url}?ai=${encodeURIComponent(JSON.stringify({ l: 'ar' }))}`);
-	assert.match(variant.label, /\(AI translated\)/);
+	assert.match(variant.label, /\(✨ AI translated, en→ar\)/);
 	assert.match(variant.label, /release/);
 });
 
@@ -342,4 +342,37 @@ test('end to end: the variant is appended under fallback policy when only Englis
 	assert.equal(res.subtitles.length, 1, 'the EN-search variant, native search being empty in this stub');
 	assert.equal(res.subtitles[0].lang, 'ar');
 	assert.match(res.subtitles[0].url, /\?ai=/);
+});
+
+// --- AI entry limit + labels -------------------------------------------------
+
+test('aiMax controls how many translated variants are appended (default 1)', () => {
+	const en3 = [
+		{ id: 'e1', url: 'http://addon.test/proxy/opensubtitles/11', lang: 'en' },
+		{ id: 'e2', url: 'http://addon.test/proxy/opensubtitles/22', lang: 'en' },
+		{ id: 'e3', url: 'http://addon.test/proxy/subdl/subtitle/a-b.zip', lang: 'en' },
+	];
+	assert.equal(appendAiTranslatedEntries([], en3, aiConfig({ aiMax: 3 }), aiConfig()).filter(s => s.id.startsWith('ai-')).length, 3);
+	assert.equal(appendAiTranslatedEntries([], en3, aiConfig(), aiConfig()).filter(s => s.id.startsWith('ai-')).length, 1, 'defaults to one');
+	assert.equal(appendAiTranslatedEntries([], en3, aiConfig({ aiMax: 5 }), aiConfig()).filter(s => s.id.startsWith('ai-')).length, 3, 'capped by available EN sources');
+	assert.equal(appendAiTranslatedEntries([], en3, aiConfig({ aiMax: 0 }), aiConfig()).filter(s => s.id.startsWith('ai-')).length, 1, '0 is invalid, clamps to default 1 — off is the off switch');
+});
+
+test('variants keep natives and get a distinct per-source URL and id', () => {
+	const en3 = [
+		{ id: 'e1', url: 'http://addon.test/proxy/opensubtitles/11', lang: 'en' },
+		{ id: 'e2', url: 'http://addon.test/proxy/opensubtitles/22', lang: 'en' },
+	];
+	const out = appendAiTranslatedEntries([AR_NATIVE], en3, aiConfig({ aiTranslate: 'always', aiMax: 2 }), aiConfig());
+	assert.equal(out.length, 3, 'native kept + 2 variants');
+	assert.equal(out[0].lang, 'ar');
+	const variants = out.filter(s => s.id.startsWith('ai-'));
+	assert.notEqual(variants[0].url, variants[1].url, 'each variant translates a distinct source');
+});
+
+test('the variant label clearly says it is AI translated and names the language direction', () => {
+	const out = appendAiTranslatedEntries([], [{ id: 'e1', url: 'http://addon.test/proxy/opensubtitles/11', lang: 'en', label: 'release' }], aiConfig(), aiConfig());
+	assert.match(out[0].label, /✨ AI translated/);
+	assert.match(out[0].label, /, en→ar\)/);
+	assert.match(out[0].label, /release/, 'source label stays attached');
 });

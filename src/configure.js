@@ -35,11 +35,13 @@ function renderConfigurePage({ env = {} } = {}) {
 		const value = entry.secret ? '' : values[entry.key]; // env secret values never enter the page
 		const def = escapeHtml(String(entry.default));
 		const common = `data-key="${escapeHtml(entry.key)}" data-default="${def}"`;
+		// the AI entry limit only makes sense while a translating policy is on
+		const aiMaxDisabled = entry.key === 'aiMax' && values.aiTranslate === 'off' ? ' disabled' : '';
 		let control;
 		if (entry.type === 'checkbox') {
-			control = `<input type="checkbox" ${common} ${value === true ? 'checked' : ''}>`;
+			control = `<input type="checkbox" ${common}${aiMaxDisabled} ${value === true ? 'checked' : ''}>`;
 		} else if (entry.type === 'number') {
-			control = `<input type="number" ${common} value="${escapeHtml(value)}">`;
+			control = `<input type="number" ${common}${aiMaxDisabled} value="${escapeHtml(value)}">`;
 		} else if (entry.type === 'select' && Array.isArray(entry.options)) {
 			const opts = entry.options.map(o =>
 				`<option value="${escapeHtml(o)}" ${String(value) === String(o) ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('');
@@ -92,6 +94,7 @@ ${rows}
 function buildConfig() {
 	const cfg = {};
 	document.querySelectorAll('[data-key]').forEach(function (f) {
+		if (f.disabled) return;
 		const def = f.dataset.default;
 		let value;
 		if (f.type === 'checkbox') value = f.checked;
@@ -102,6 +105,13 @@ function buildConfig() {
 	});
 	return cfg;
 }
+// The AI entry limit only applies while a translating policy is selected.
+function syncAiMax() {
+	const policy = document.querySelector('[data-key="aiTranslate"]');
+	const max = document.querySelector('[data-key="aiMax"]');
+	if (policy && max) max.disabled = policy.value === 'off';
+}
+syncAiMax();
 function update() {
 	const cfg = buildConfig();
 	const url = location.origin + '/' + encodeURIComponent(JSON.stringify(cfg)) + '/manifest.json';

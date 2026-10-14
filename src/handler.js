@@ -70,6 +70,7 @@ function createSubtitlesHandler({ registry, resolveConfig }) {
  *
  * @param {Array} entries native listing (already merged, ordered, stripped)
  * @param {Array} enSources English entries from the dedicated EN search (ordered)
+ * Appends at most `aiMax` variants (default 1).
  */
 function appendAiTranslatedEntries(entries, enSources, config, envConfig) {
 	const policy = String(config.aiTranslate || 'fallback');
@@ -79,15 +80,22 @@ function appendAiTranslatedEntries(entries, enSources, config, envConfig) {
 	if (!config.aiApiKey && !envConfig.aiApiKey) return entries; // no translator configured anywhere
 	const hasNative = entries.some(e => e.lang === target);
 	if (hasNative && policy !== 'always') return entries;
-	const source = (Array.isArray(enSources) ? enSources : []).find(e => e.lang === 'en' && isProxyUrl(e.url));
-	if (!source) return entries;
+	const max = positiveInt(config.aiMax, 1);
+	const sources = (Array.isArray(enSources) ? enSources : [])
+		.filter(e => e.lang === 'en' && isProxyUrl(e.url))
+		.slice(0, max);
+	if (!sources.length) return entries;
 
-	return entries.concat([{
+	const variants = sources.map(source => ({
 		id: `ai-${source.id}`,
 		url: `${source.url}?ai=${buildAiParam(target, config, envConfig)}`,
 		lang: target,
-		label: source.label ? `${source.label} (AI translated)` : '(AI translated)',
-	}]);
+		// the label is the only channel the subtitle protocol gives us to mark
+		// these entries (no buttons/actions exist there)
+		label: source.label ? `${source.label} (✨ AI translated, en→${target})` : `(✨ AI translated, en→${target})`,
+	}));
+	if (config.debug === true) console.log(`[debug] ai variants: ${variants.length} (policy ${policy}, target ${target})`);
+	return entries.concat(variants);
 }
 
 /** Only URLs this add-on's content proxy serves can be translated (fail-closed). */

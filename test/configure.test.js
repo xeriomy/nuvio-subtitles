@@ -105,3 +105,13 @@ test('the install URL form the page generates is served by this addon ({config}/
 		}));
 	}
 });
+
+test('the AIMAX field is disabled in the form when the policy is off, enabled in fallback/always', () => {
+	const off = renderConfigurePage({ env: { AI_TRANSLATE: 'off' } });
+	const m = /<input[^>]*data-key="aiMax"[^>]*>/.exec(off);
+	assert.ok(m, 'aiMax renders');
+	assert.match(m[0], /disabled/, 'disabled when policy is off');
+	const on = renderConfigurePage({ env: { AI_TRANSLATE: 'always' } });
+	assert.doesNotMatch(/<input[^>]*data-key="aiMax"[^>]*>/.exec(on)[0], /disabled/, 'enabled when a translating policy is on');
+	assert.match(renderConfigurePage({ env: {} }), /syncAiMax/, 'page JS keeps the field in sync with the policy select');
+});

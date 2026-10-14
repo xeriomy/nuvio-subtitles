@@ -81,6 +81,7 @@ Precedence, highest first:
 | `aiApiKey` | `AI_API_KEY` | text | *(empty)* | API key for the OpenAI-compatible translation endpoint — **read from env only**; empty disables AI translation. |
 | `aiBaseUrl` | `AI_BASE_URL` | text | `https://api.openai.com/v1` | Base URL of the OpenAI-compatible endpoint (`POST {base}/chat/completions`) — OpenRouter, Ollama, LM Studio, etc. |
 | `aiModel` | `AI_MODEL` | text | `gpt-4o-mini` | Model name for the translation endpoint; must follow the JSON-array protocol (a capable instruct model). |
+| `aiMax` | `AI_MAX` | number | `1` | How many AI-translated entries to add per listing (only under the `fallback`/`always` policies — has no effect when `off`). Each distinct entry costs one full-file translation; repeats are cached. |
 | `providerOrder` | `PROVIDER_ORDER` | text | *(empty)* | Comma-separated provider ids controlling result order, e.g. `opensubtitles,subdl,demoFixtures`. |
 | `perProviderSettings` | `PER_PROVIDER_SETTINGS` | text | `{}` | JSON object of per-provider overrides, e.g. `{"subdl":false}`. |
 | `maxSubtitles` | `MAX_SUBTITLES` | number | `20` | Maximum subtitle entries returned per request. |
@@ -217,7 +218,7 @@ When a preferred-language subtitle doesn't exist natively, the add-on can transl
 
 **Trigger policy** (`aiTranslate`):
 
-- `fallback` *(default)* — only when the listing has **no** native entry in the preferred language (first entry of `languages`). The best English result from a dedicated English search gains one extra entry labelled `(AI translated)`.
+- `fallback` *(default)* — only when the listing has **no** native entry in the preferred language (first entry of `languages`). Up to `aiMax` best English results from a dedicated English search gain extra entries labelled `(✨ AI translated, en→ar)`.
 - `always` — the translated entry is added even next to native ones.
 - `off` — never; the provider search stays exactly as it would be without the feature.
 
@@ -270,9 +271,9 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 | Subtitles for the wrong show / wrong episode | (Historic, two causes) the fixtures provider answered for any id, and SubDL's loose TMDB matching could return a different show or episode packs. | Fixed: fixtures abstain outside their demo ids; SubDL results are validated against the requested show and filtered by episode coverage; OpenSubtitles hits are validated against the requested feature (parent ids for episodes). |
 | `Syntax error in regexp pattern` under Auto Sync | Nuvio's own regex crashing on `{…}` ASS tags — anime subtitles are ASS-format, saturated with them. | Fixed server-side: ASS/SSA files are converted to plain, brace-free SRT before serving (timing kept, styling dropped). A blanket strip on SRT text was tried and reverted — SRT passes through byte-faithful. If the error still appears on plain SRT content, it is a Nuvio client bug. |
 | Subtitles exist but don't sync | Release/framerate mismatch (25fps subs on a 23.976fps file), or the upload was cut for a different encode. | Entries matching your exact file (hash match) sort first and are labelled `✓` in Stremio. Note Nuvio's picker currently ignores the `label` field — it shows only "Arabic (Nuvio Subtitles)" — but ordering still applies. |
-| The `(AI translated)` entry fails with `HTTP 401` | Wrong `AI_API_KEY` for the configured endpoint. | Fix the key (server env or `/configure`). |
-| The `(AI translated)` entry fails with `HTTP 429` | The AI endpoint's rate limit or quota is exhausted. | The native entries are unaffected; retry after the endpoint's quota resets. Translation results are cached, so each subtitle costs at most one successful model call. |
-| The `(AI translated)` entry fails with `HTTP 502` | The model ignored the JSON-array protocol (returned the wrong number of lines or non-JSON) — a too-weak model. | Pick a capable instruct model in `AI_MODEL`; the add-on never serves a translation whose cue count doesn't match its source. |
+| The `(✨ AI translated)` entry fails with `HTTP 401` | Wrong `AI_API_KEY` for the configured endpoint. | Fix the key (server env or `/configure`). |
+| The `(✨ AI translated)` entry fails with `HTTP 429` | The AI endpoint's rate limit or quota is exhausted. | The native entries are unaffected; retry after the endpoint's quota resets. Translation results are cached, so each subtitle costs at most one successful model call. |
+| The `(✨ AI translated)` entry fails with `HTTP 502` | The model ignored the JSON-array protocol (returned the wrong number of lines or non-JSON) — a too-weak model. | Pick a capable instruct model in `AI_MODEL`; the add-on never serves a translation whose cue count doesn't match its source. |
 | AI translation never appears | Policy is `off`, the preferred language is English, the model endpoint has no key, or native preferred-language subtitles exist (fallback policy adds nothing then). | Check `/healthz` → `translators`, and the `aiTranslate` policy. |
 | Very few or no subtitles for an anime/obscure title | The providers genuinely have nothing indexed for that episode (verified: OpenSubtitles has 0 Arabic subs for JoJo S2E5). | Correct behaviour — no wrong-show filler. Try another episode/movie, or another provider's key. |
 
@@ -285,7 +286,7 @@ The SDK's router ignores query-string extras (verified against `stremio-addon-sd
 | Native Arabic listings unchanged by the feature | Same process, seconds apart: `aiTranslate: off` vs default (key set) — **byte-identical 20-entry listings** (Shawshank, GoT S01E01, Inception). The old-vs-new code A/B differences measured earlier were upstream catalog churn, not code. |
 | `GET /configure` | 200 `text/html; charset=utf-8` — every config key + env name present, warning shown, env secret values absent (test-pinned) |
 | Generated install URL form `/{config}/manifest.json` | 200 manifest (`community.nuvio.subtitles`) with properly-encoded configs incl. `%2F` inside `aiBaseUrl` |
-| AI variant in the listing (`aiTranslate: always`) | 21 entries = 20 natives + 1 `(AI translated)`; variant URL = source proxy URL + `?ai={"l":"ar"}` (env-held key NOT in the URL; a per-client `aiBaseUrl` WAS carried as `b`) |
+| AI variant(s) in the listing (`aiTranslate: always`) | 21 entries = 20 natives + 1 `✨ AI translated` (per `aiMax: 1`); variant URL = source proxy URL + `?ai={"l":"ar"}` (env-held key NOT in the URL; a per-client `aiBaseUrl` WAS carried as `b`) |
 | Translated fetch | 200 in 1.45 s (source download + 49 model batches); **1594 cues, timing lines byte-identical to the source file**; texts replaced |
 | Cache-by-hash re-fetch | 7.1 ms, **0 model calls** (`translate … (cache hit)` in DEBUG; mock call count unchanged at 49 = ⌈2402 cues / 50⌉ batches) |
 | AI endpoint quota exhausted | Mock answering 429 → the translated fetch answers **HTTP 429**; native entries unaffected |

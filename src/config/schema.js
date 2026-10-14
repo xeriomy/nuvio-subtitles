@@ -81,6 +81,13 @@ const CONFIG_SCHEMA = [
 		description: 'Model name sent to the translation endpoint. Must return a JSON array of translated strings (a capable instruct model).',
 	},
 	{
+		key: 'aiMax',
+		env: 'AI_MAX',
+		type: 'number',
+		default: 1,
+		description: 'How many AI-translated entries to add per listing (fallback/always policies only). Each distinct entry costs one full-file translation; repeats are served from cache.',
+	},
+	{
 		key: 'encodingFallback',
 		env: 'ENCODING_FALLBACK',
 		type: 'checkbox',
